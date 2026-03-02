@@ -1,0 +1,8 @@
+Analyzing concord...                                            
+
+   info - Don't use 'BuildContext's across async gaps - lib\screens\approver\approver_home.dart:427:28 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps - lib\screens\approver\approver_home.dart:498:28 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps - lib\screens\student\create_leave_screen.dart:118:9 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps - lib\screens\student\leave_detail_screen.dart:470:28 - use_build_context_synchronously
+
+4 issues found. (ran in 2.8s)

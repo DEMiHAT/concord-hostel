@@ -1,0 +1,12 @@
+lib\screens\admin\admin_home.dart:42:            color: AppColors.bgCard.withValues(alpha: 0.9),
+lib\screens\admin\admin_home.dart:286:            color: color.withValues(alpha: 0.15),
+lib\screens\admin\admin_home.dart:322:              color: color.withValues(alpha: 0.15),
+lib\screens\admin\admin_home.dart:365:                ? AppColors.accentGreen.withValues(alpha: 0.4)
+lib\screens\admin\admin_home.dart:376:                        .withValues(alpha: 0.15),
+lib\screens\admin\admin_home.dart:568:                              color: actionColor.withValues(alpha: 0.15),
+lib\screens\admin\admin_home.dart:639:                                  .withValues(alpha: 0.15),
+lib\screens\admin\admin_home.dart:748:              color: color.withValues(alpha: 0.15),
+lib\screens\admin\admin_home.dart:807:                          color: AppColors.primaryStart.withValues(alpha: 0.15),
+lib\screens\admin\admin_home.dart:1004:        color: color.withValues(alpha: 0.1),
+lib\screens\admin\admin_home.dart:1006:        border: Border.all(color: color.withValues(alpha: 0.3), width: 0.5),
+lib\screens\admin\admin_home.dart:1021:              color: color.withValues(alpha: 0.8),
