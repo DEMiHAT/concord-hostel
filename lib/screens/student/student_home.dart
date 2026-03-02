@@ -3,6 +3,9 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:intl/intl.dart';
 import '../../core/theme/app_theme.dart';
 import '../../models/enums.dart';
+import '../../models/leave_request.dart';
+import '../../models/qr_pass.dart';
+import '../../models/user_model.dart';
 import '../../services/mock_service.dart';
 import '../../widgets/glass_widgets.dart';
 import 'create_leave_screen.dart';
@@ -87,7 +90,7 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
     );
   }
 
-  Widget _buildDashboard(user, leaves, activePasses) {
+  Widget _buildDashboard(AppUser user, List<LeaveRequest> leaves, List<QrPass> activePasses) {
     final pendingCount = leaves.where((l) =>
         l.status != LeaveStatus.approved &&
         l.status != LeaveStatus.rejected).length;
@@ -264,7 +267,7 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
     );
   }
 
-  Widget _buildLeaveCard(leave) {
+  Widget _buildLeaveCard(LeaveRequest leave) {
     final dateFormat = DateFormat('dd MMM');
     Color statusColor;
     switch (leave.status) {
@@ -344,7 +347,7 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
     ).animate().fadeIn(duration: 300.ms).slideX(begin: 0.02);
   }
 
-  Widget _buildLeaveHistory(leaves) {
+  Widget _buildLeaveHistory(List<LeaveRequest> leaves) {
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
       padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -381,7 +384,7 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
     );
   }
 
-  Widget _buildPassesView(activePasses) {
+  Widget _buildPassesView(List<QrPass> activePasses) {
     final allPasses = widget.service.getStudentPasses(widget.service.currentUser!.uid);
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
@@ -476,7 +479,7 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
     );
   }
 
-  Widget _buildProfileView(user) {
+  Widget _buildProfileView(AppUser user) {
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
       padding: const EdgeInsets.symmetric(horizontal: 20),

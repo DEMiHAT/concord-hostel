@@ -3,6 +3,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:intl/intl.dart';
 import '../../core/theme/app_theme.dart';
 import '../../models/enums.dart';
+import '../../models/leave_request.dart';
 import '../../services/mock_service.dart';
 import '../../widgets/glass_widgets.dart';
 
@@ -229,7 +230,7 @@ class _ApproverHomeScreenState extends State<ApproverHomeScreen> {
     );
   }
 
-  Widget _buildRequestCard(req) {
+  Widget _buildRequestCard(LeaveRequest req) {
     final dateFormat = DateFormat('dd MMM');
     Color statusColor;
     switch (req.status) {
@@ -343,7 +344,7 @@ class _ApproverHomeScreenState extends State<ApproverHomeScreen> {
     ).animate().fadeIn(duration: 300.ms).slideX(begin: 0.02);
   }
 
-  Future<void> _approve(req) async {
+  Future<void> _approve(LeaveRequest req) async {
     final user = widget.service.currentUser!;
     await widget.service.approveRequest(
       req.id,
@@ -362,7 +363,7 @@ class _ApproverHomeScreenState extends State<ApproverHomeScreen> {
     }
   }
 
-  Future<void> _reject(req) async {
+  Future<void> _reject(LeaveRequest req) async {
     final reasonController = TextEditingController();
     final result = await showDialog<bool>(
       context: context,
@@ -434,7 +435,7 @@ class _ApproverHomeScreenState extends State<ApproverHomeScreen> {
     reasonController.dispose();
   }
 
-  Future<void> _requestDocs(req) async {
+  Future<void> _requestDocs(LeaveRequest req) async {
     final commentController = TextEditingController();
     final result = await showDialog<bool>(
       context: context,
@@ -505,7 +506,7 @@ class _ApproverHomeScreenState extends State<ApproverHomeScreen> {
     commentController.dispose();
   }
 
-  Widget _buildPendingList(pendingRequests) {
+  Widget _buildPendingList(List<LeaveRequest> pendingRequests) {
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
       padding: const EdgeInsets.symmetric(horizontal: 20),
