@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../../core/theme/app_theme.dart';
 import '../../models/enums.dart';
 import '../../models/leave_request.dart';
+import '../../models/user_model.dart';
 import '../../services/mock_service.dart';
 import '../../widgets/glass_widgets.dart';
 
@@ -84,7 +85,7 @@ class _ApproverHomeScreenState extends State<ApproverHomeScreen> {
     );
   }
 
-  Widget _buildDashboard(user, pendingRequests) {
+  Widget _buildDashboard(AppUser user, List<LeaveRequest> pendingRequests) {
     final stats = widget.service.getStats();
 
     return SingleChildScrollView(
@@ -548,7 +549,7 @@ class _ApproverHomeScreenState extends State<ApproverHomeScreen> {
     );
   }
 
-  Widget _buildAllRequests(allRequests) {
+  Widget _buildAllRequests(List<LeaveRequest> allRequests) {
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
       padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -568,7 +569,7 @@ class _ApproverHomeScreenState extends State<ApproverHomeScreen> {
     );
   }
 
-  Widget _buildProfile(user) {
+  Widget _buildProfile(AppUser user) {
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
       padding: const EdgeInsets.symmetric(horizontal: 20),
