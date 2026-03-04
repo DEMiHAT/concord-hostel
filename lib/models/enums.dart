@@ -238,6 +238,7 @@ enum UserRole {
   parent,
   security,
   admin,
+  medicalOfficer,
 }
 
 extension UserRoleExtension on UserRole {
@@ -259,6 +260,8 @@ extension UserRoleExtension on UserRole {
         return 'Security';
       case UserRole.admin:
         return 'Admin';
+      case UserRole.medicalOfficer:
+        return 'Medical Officer';
     }
   }
 
@@ -280,6 +283,8 @@ extension UserRoleExtension on UserRole {
         return 'security';
       case UserRole.admin:
         return 'admin';
+      case UserRole.medicalOfficer:
+        return 'medical_officer';
     }
   }
 
@@ -301,6 +306,8 @@ extension UserRoleExtension on UserRole {
         return UserRole.security;
       case 'admin':
         return UserRole.admin;
+      case 'medical_officer':
+        return UserRole.medicalOfficer;
       default:
         return UserRole.student;
     }

@@ -7,6 +7,9 @@ import '../../models/leave_request.dart';
 import '../../models/user_model.dart';
 import '../../services/mock_service.dart';
 import '../../widgets/glass_widgets.dart';
+import '../shared/attendance_screen.dart';
+import '../shared/medical_screen.dart';
+import '../shared/grievance_screen.dart';
 
 class ApproverHomeScreen extends StatefulWidget {
   final MockService service;
@@ -225,7 +228,89 @@ class _ApproverHomeScreenState extends State<ApproverHomeScreen> {
               ),
             ),
           ],
+          const SizedBox(height: 24),
+
+          // Modules Quick Access
+          Text('Modules', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: _buildModuleTile(
+                  icon: Icons.event_available_rounded,
+                  label: 'Attendance',
+                  color: AppColors.accentGreen,
+                  onTap: () => Navigator.push(context, MaterialPageRoute(
+                    builder: (_) => AttendanceScreen(
+                      service: widget.service,
+                      isWardenView: user.role == UserRole.warden || user.role == UserRole.admin,
+                    ),
+                  )),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _buildModuleTile(
+                  icon: Icons.medical_services_rounded,
+                  label: 'Medical',
+                  color: AppColors.accentRed,
+                  onTap: () => Navigator.push(context, MaterialPageRoute(
+                    builder: (_) => MedicalScreen(
+                      service: widget.service,
+                      isApproverView: true,
+                    ),
+                  )),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _buildModuleTile(
+                  icon: Icons.feedback_rounded,
+                  label: 'Grievances',
+                  color: AppColors.accentAmber,
+                  onTap: () => Navigator.push(context, MaterialPageRoute(
+                    builder: (_) => GrievanceScreen(
+                      service: widget.service,
+                      isManagementView: true,
+                    ),
+                  )),
+                ),
+              ),
+            ],
+          ).animate().fadeIn(delay: 500.ms, duration: 400.ms),
           const SizedBox(height: 100),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildModuleTile({
+    required IconData icon,
+    required String label,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return GlassCard(
+      onTap: onTap,
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 16),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Icon(icon, color: color, size: 22),
+          ),
+          const SizedBox(height: 8),
+          Text(label,
+              style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textPrimary)),
         ],
       ),
     );

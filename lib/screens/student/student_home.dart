@@ -8,6 +8,9 @@ import '../../models/qr_pass.dart';
 import '../../models/user_model.dart';
 import '../../services/mock_service.dart';
 import '../../widgets/glass_widgets.dart';
+import '../shared/attendance_screen.dart';
+import '../shared/medical_screen.dart';
+import '../shared/grievance_screen.dart';
 import 'create_leave_screen.dart';
 import 'leave_detail_screen.dart';
 import 'qr_pass_screen.dart';
@@ -254,6 +257,50 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
           ).animate().fadeIn(delay: 400.ms, duration: 400.ms),
           const SizedBox(height: 24),
 
+          // Quick Access Modules
+          Text(
+            'Quick Access',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: _buildModuleTile(
+                  icon: Icons.event_available_rounded,
+                  label: 'Attendance',
+                  color: AppColors.accentGreen,
+                  onTap: () => Navigator.push(context, MaterialPageRoute(
+                    builder: (_) => AttendanceScreen(service: widget.service),
+                  )),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _buildModuleTile(
+                  icon: Icons.medical_services_rounded,
+                  label: 'Medical',
+                  color: AppColors.accentRed,
+                  onTap: () => Navigator.push(context, MaterialPageRoute(
+                    builder: (_) => MedicalScreen(service: widget.service),
+                  )),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _buildModuleTile(
+                  icon: Icons.feedback_rounded,
+                  label: 'Grievances',
+                  color: AppColors.accentAmber,
+                  onTap: () => Navigator.push(context, MaterialPageRoute(
+                    builder: (_) => GrievanceScreen(service: widget.service),
+                  )),
+                ),
+              ),
+            ],
+          ).animate().fadeIn(delay: 500.ms, duration: 400.ms),
+          const SizedBox(height: 24),
+
           // Recent Requests
           Text(
             'Recent Requests',
@@ -262,6 +309,38 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
           const SizedBox(height: 8),
           ...leaves.take(3).map((leave) => _buildLeaveCard(leave)),
           const SizedBox(height: 100),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildModuleTile({
+    required IconData icon,
+    required String label,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return GlassCard(
+      onTap: onTap,
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 16),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Icon(icon, color: color, size: 22),
+          ),
+          const SizedBox(height: 8),
+          Text(label,
+              style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textPrimary)),
         ],
       ),
     );

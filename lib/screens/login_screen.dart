@@ -8,6 +8,7 @@ import 'student/student_home.dart';
 import 'approver/approver_home.dart';
 import 'security/security_home.dart';
 import 'admin/admin_home.dart';
+import 'medical_officer/medical_officer_home.dart';
 
 class LoginScreen extends StatefulWidget {
   final MockService service;
@@ -31,6 +32,7 @@ class _LoginScreenState extends State<LoginScreen>
     {'role': UserRole.warden, 'icon': Icons.shield_rounded, 'label': 'Warden', 'color': const Color(0xFF8B5CF6)},
     {'role': UserRole.security, 'icon': Icons.security_rounded, 'label': 'Security', 'color': AppColors.accentRed},
     {'role': UserRole.admin, 'icon': Icons.admin_panel_settings_rounded, 'label': 'Admin', 'color': const Color(0xFF14B8A6)},
+    {'role': UserRole.medicalOfficer, 'icon': Icons.local_hospital_rounded, 'label': 'Medical Officer', 'color': const Color(0xFFE11D48)},
   ];
 
   Future<void> _login(UserRole role) async {
@@ -51,6 +53,9 @@ class _LoginScreenState extends State<LoginScreen>
           break;
         case UserRole.admin:
           screen = AdminHomeScreen(service: widget.service);
+          break;
+        case UserRole.medicalOfficer:
+          screen = MedicalOfficerHomeScreen(service: widget.service);
           break;
         default:
           screen = ApproverHomeScreen(service: widget.service);

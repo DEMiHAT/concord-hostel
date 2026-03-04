@@ -3,6 +3,9 @@ import '../models/enums.dart';
 import '../models/user_model.dart';
 import '../models/leave_request.dart';
 import '../models/qr_pass.dart';
+import '../models/attendance.dart';
+import '../models/medical.dart';
+import '../models/grievance.dart';
 
 /// Mock authentication and data service for demo purposes.
 /// Replace with actual Firebase calls when Firebase is configured.
@@ -12,12 +15,20 @@ class MockService extends ChangeNotifier {
   final List<QrPass> _qrPasses = [];
   final List<AppUser> _users = [];
   bool _busMode = false;
+  final List<AttendanceRecord> _attendanceRecords = [];
+  final List<AttendanceException> _attendanceExceptions = [];
+  final List<MedicalVisit> _medicalVisits = [];
+  final List<Grievance> _grievances = [];
 
   AppUser? get currentUser => _currentUser;
   List<LeaveRequest> get leaveRequests => List.unmodifiable(_leaveRequests);
   List<QrPass> get qrPasses => List.unmodifiable(_qrPasses);
   List<AppUser> get users => List.unmodifiable(_users);
   bool get busMode => _busMode;
+  List<AttendanceRecord> get attendanceRecords => List.unmodifiable(_attendanceRecords);
+  List<AttendanceException> get attendanceExceptions => List.unmodifiable(_attendanceExceptions);
+  List<MedicalVisit> get medicalVisits => List.unmodifiable(_medicalVisits);
+  List<Grievance> get grievances => List.unmodifiable(_grievances);
 
   void setBusMode(bool value) {
     _busMode = value;
@@ -90,6 +101,13 @@ class MockService extends ChangeNotifier {
         name: 'System Admin',
         email: 'admin@university.edu',
         role: UserRole.admin,
+      ),
+      AppUser(
+        uid: 'medofficer1',
+        name: 'Dr. Kavitha Nair',
+        email: 'kavitha.medical@university.edu',
+        role: UserRole.medicalOfficer,
+        department: 'Health Services',
       ),
     ]);
 
@@ -683,5 +701,483 @@ class MockService extends ChangeNotifier {
       'stillOut': stillOut,
       'total': exitedHostel + exitedCampus + returned,
     };
+  }
+
+  // ════════════════════════════════════════════════════════
+  // ATTENDANCE MODULE
+  // ════════════════════════════════════════════════════════
+
+  /// Generate daily attendance for all students (scheduler logic)
+  Future<void> generateDailyAttendance() async {
+    await Future.delayed(const Duration(milliseconds: 500));
+    final today = DateTime.now();
+    final studentUsers = _users.where((u) => u.role == UserRole.student);
+
+    for (final student in studentUsers) {
+      // Check if already generated for today
+      final existing = _attendanceRecords.where((a) =>
+          a.studentId == student.uid &&
+          a.date.year == today.year &&
+          a.date.month == today.month &&
+          a.date.day == today.day);
+      if (existing.isNotEmpty) continue;
+
+      // Determine status based on movement data
+      AttendanceStatus status;
+      String derivedFrom;
+
+      // 1. Check medical restriction
+      final medRestricted = _medicalVisits.any((m) =>
+          m.studentId == student.uid &&
+          m.movementRestricted &&
+          m.status != MedicalStatus.cleared);
+      if (medRestricted) {
+        status = AttendanceStatus.medicalRestricted;
+        derivedFrom = 'medical';
+      }
+      // 2. Check active approved leave
+      else if (_leaveRequests.any((l) =>
+          l.studentId == student.uid &&
+          l.status == LeaveStatus.approved &&
+          l.fromDate.isBefore(today) &&
+          l.toDate.isAfter(today))) {
+        final leave = _leaveRequests.firstWhere((l) =>
+            l.studentId == student.uid &&
+            l.status == LeaveStatus.approved &&
+            l.fromDate.isBefore(today) &&
+            l.toDate.isAfter(today));
+        if (leave.leaveType == LeaveType.workingDayHoliday) {
+          status = AttendanceStatus.nonResident;
+          derivedFrom = 'holiday_leave';
+        } else {
+          status = AttendanceStatus.onLeave;
+          derivedFrom = 'approved_leave';
+        }
+      }
+      // 3. Check gate scans
+      else {
+        final studentPasses = _qrPasses.where((p) => p.studentId == student.uid);
+        final activePass = studentPasses.where((p) => p.isActive);
+
+        if (activePass.isEmpty) {
+          // Never exited today
+          status = AttendanceStatus.present;
+          derivedFrom = 'no_exit';
+        } else {
+          final pass = activePass.first;
+          if (pass.state == QrState.hostelEntered || pass.state == QrState.unused) {
+            status = AttendanceStatus.present;
+            derivedFrom = 'gate_scan_returned';
+          } else if (pass.state == QrState.hostelExited || pass.state == QrState.campusExited) {
+            status = AttendanceStatus.unaccounted;
+            derivedFrom = 'gate_scan_no_return';
+            // Create exception
+            _attendanceExceptions.add(AttendanceException(
+              id: 'exc_${DateTime.now().millisecondsSinceEpoch}_${student.uid}',
+              studentId: student.uid,
+              studentName: student.name,
+              type: AttendanceExceptionType.exitWithoutReturn,
+              description: 'Student exited but has not returned by curfew',
+            ));
+          } else {
+            status = AttendanceStatus.outValid;
+            derivedFrom = 'gate_scan_valid';
+          }
+        }
+      }
+
+      _attendanceRecords.add(AttendanceRecord(
+        id: 'att_${today.millisecondsSinceEpoch}_${student.uid}',
+        studentId: student.uid,
+        studentName: student.name,
+        hostelBlock: student.hostelBlock ?? 'Unknown',
+        date: today,
+        status: status,
+        derivedFrom: derivedFrom,
+      ));
+    }
+    notifyListeners();
+  }
+
+  /// Get attendance records for a specific date
+  List<AttendanceRecord> getAttendanceForDate(DateTime date) {
+    return _attendanceRecords.where((a) =>
+        a.date.year == date.year &&
+        a.date.month == date.month &&
+        a.date.day == date.day).toList();
+  }
+
+  /// Get attendance history for a specific student
+  List<AttendanceRecord> getStudentAttendance(String studentId) {
+    return _attendanceRecords.where((a) => a.studentId == studentId).toList()
+      ..sort((a, b) => b.date.compareTo(a.date));
+  }
+
+  /// Get unresolved attendance exceptions
+  List<AttendanceException> getUnresolvedExceptions() {
+    return _attendanceExceptions.where((e) => !e.resolved).toList();
+  }
+
+  /// Get attendance summary counts for a date
+  Map<AttendanceStatus, int> getAttendanceSummary(DateTime date) {
+    final records = getAttendanceForDate(date);
+    final summary = <AttendanceStatus, int>{};
+    for (final status in AttendanceStatus.values) {
+      summary[status] = records.where((r) => r.status == status).length;
+    }
+    return summary;
+  }
+
+  // ════════════════════════════════════════════════════════
+  // MEDICAL MODULE (Officer-Driven Flow)
+  // ════════════════════════════════════════════════════════
+
+  /// Medical Officer creates a medical record for a student
+  /// Auto-intimates RT, Faculty Advisor, Warden, and HoD
+  Future<void> createMedicalRecord({
+    required String studentId,
+    required String symptoms,
+    required String diagnosis,
+    required int restDays,
+    required FitnessStatus fitnessStatus,
+    required bool restrictMovement,
+    String? prescription,
+    String? note,
+  }) async {
+    await Future.delayed(const Duration(milliseconds: 400));
+    final officer = _currentUser!;
+    final student = _users.firstWhere((u) => u.uid == studentId);
+
+    // Find stakeholders to auto-intimate
+    final rt = _users.where((u) => u.role == UserRole.rt).toList();
+    final faculty = _users.where((u) => u.role == UserRole.faculty).toList();
+    final warden = _users.where((u) => u.role == UserRole.warden).toList();
+    final hod = _users.where((u) => u.role == UserRole.hod).toList();
+
+    final now = DateTime.now();
+    final intimations = <MedicalIntimation>[
+      if (rt.isNotEmpty)
+        MedicalIntimation(role: 'Resident Tutor', personName: rt.first.name, notifiedAt: now),
+      if (faculty.isNotEmpty)
+        MedicalIntimation(role: 'Faculty Advisor', personName: faculty.first.name, notifiedAt: now),
+      if (warden.isNotEmpty)
+        MedicalIntimation(role: 'Warden', personName: warden.first.name, notifiedAt: now),
+      if (hod.isNotEmpty)
+        MedicalIntimation(role: 'Head of Department', personName: hod.first.name, notifiedAt: now),
+    ];
+
+    _medicalVisits.add(MedicalVisit(
+      id: 'med_${now.millisecondsSinceEpoch}',
+      studentId: student.uid,
+      studentName: student.name,
+      hostelBlock: student.hostelBlock ?? '',
+      rollNumber: student.rollNumber,
+      createdByOfficerId: officer.uid,
+      createdByOfficerName: officer.name,
+      symptoms: symptoms,
+      diagnosis: diagnosis,
+      restDays: restDays,
+      fitnessStatus: fitnessStatus,
+      status: restrictMovement ? MedicalStatus.medicalRestricted : MedicalStatus.medicalRest,
+      movementRestricted: restrictMovement,
+      prescription: prescription,
+      medicalOfficerNote: note,
+      intimations: intimations,
+    ));
+    notifyListeners();
+  }
+
+  /// Medical Officer updates fitness status of a student record
+  Future<void> updateFitnessStatus({
+    required String visitId,
+    required FitnessStatus fitnessStatus,
+    String? note,
+  }) async {
+    await Future.delayed(const Duration(milliseconds: 300));
+    final index = _medicalVisits.indexWhere((m) => m.id == visitId);
+    if (index != -1) {
+      _medicalVisits[index] = _medicalVisits[index].copyWith(
+        fitnessStatus: fitnessStatus,
+        medicalOfficerNote: note ?? _medicalVisits[index].medicalOfficerNote,
+        // If fit, auto-clear restrictions
+        movementRestricted: fitnessStatus == FitnessStatus.fit ? false : _medicalVisits[index].movementRestricted,
+        status: fitnessStatus == FitnessStatus.fit ? MedicalStatus.cleared : _medicalVisits[index].status,
+        clearedAt: fitnessStatus == FitnessStatus.fit ? DateTime.now() : null,
+        clearedBy: fitnessStatus == FitnessStatus.fit ? _currentUser?.name : null,
+      );
+      notifyListeners();
+    }
+  }
+
+  /// Medical Officer updates diagnosis/prescription
+  Future<void> updateMedicalRecord({
+    required String visitId,
+    String? diagnosis,
+    int? restDays,
+    String? prescription,
+    bool? restrictMovement,
+    String? note,
+  }) async {
+    await Future.delayed(const Duration(milliseconds: 300));
+    final index = _medicalVisits.indexWhere((m) => m.id == visitId);
+    if (index != -1) {
+      _medicalVisits[index] = _medicalVisits[index].copyWith(
+        diagnosis: diagnosis,
+        restDays: restDays,
+        prescription: prescription,
+        movementRestricted: restrictMovement,
+        medicalOfficerNote: note,
+        // If restriction changed, update status
+        status: (restrictMovement == true)
+            ? MedicalStatus.medicalRestricted
+            : _medicalVisits[index].status,
+      );
+      notifyListeners();
+    }
+  }
+
+  /// Issue medical clearance (officer declares fit)
+  Future<void> issueMedicalClearance(String visitId) async {
+    await Future.delayed(const Duration(milliseconds: 300));
+    final index = _medicalVisits.indexWhere((m) => m.id == visitId);
+    if (index != -1) {
+      _medicalVisits[index] = _medicalVisits[index].copyWith(
+        status: MedicalStatus.cleared,
+        fitnessStatus: FitnessStatus.fit,
+        movementRestricted: false,
+        clearedAt: DateTime.now(),
+        clearedBy: _currentUser?.name ?? 'System',
+        reviewRequested: false,
+      );
+      notifyListeners();
+    }
+  }
+
+  /// Student requests review of an existing record (cannot create new ones)
+  Future<void> requestMedicalReview({
+    required String visitId,
+    String? note,
+  }) async {
+    await Future.delayed(const Duration(milliseconds: 300));
+    final index = _medicalVisits.indexWhere((m) => m.id == visitId);
+    if (index != -1) {
+      _medicalVisits[index] = _medicalVisits[index].copyWith(
+        reviewRequested: true,
+        reviewRequestNote: note ?? 'Student has requested a review',
+        reviewRequestedAt: DateTime.now(),
+      );
+      notifyListeners();
+    }
+  }
+
+  /// Stakeholder acknowledges receipt of medical intimation
+  Future<void> acknowledgeMedicalIntimation({
+    required String visitId,
+    required String role,
+  }) async {
+    await Future.delayed(const Duration(milliseconds: 200));
+    final index = _medicalVisits.indexWhere((m) => m.id == visitId);
+    if (index != -1) {
+      final intimations = List<MedicalIntimation>.from(_medicalVisits[index].intimations);
+      final iIdx = intimations.indexWhere((i) => i.role == role);
+      if (iIdx != -1) {
+        intimations[iIdx] = intimations[iIdx].copyWith(
+          acknowledged: true,
+          acknowledgedAt: DateTime.now(),
+        );
+        _medicalVisits[index] = _medicalVisits[index].copyWith(
+          intimations: intimations,
+        );
+        notifyListeners();
+      }
+    }
+  }
+
+  /// Check if student is medically restricted (gate check)
+  bool isStudentMedicalRestricted(String studentId) {
+    return _medicalVisits.any((m) =>
+        m.studentId == studentId &&
+        m.movementRestricted &&
+        m.status != MedicalStatus.cleared);
+  }
+
+  /// Get fitness status for a student (latest record)
+  FitnessStatus? getStudentFitnessStatus(String studentId) {
+    final visits = _medicalVisits.where((m) => m.studentId == studentId).toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    if (visits.isEmpty) return null;
+    return visits.first.fitnessStatus;
+  }
+
+  /// Get medical visits for a student (read-only view)
+  List<MedicalVisit> getStudentMedicalVisits(String studentId) {
+    return _medicalVisits.where((m) => m.studentId == studentId).toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+  }
+
+  /// Get all medical visits (officer + warden view)
+  List<MedicalVisit> getAllMedicalVisits() {
+    return List<MedicalVisit>.from(_medicalVisits)
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+  }
+
+  /// Get records that have review requests pending
+  List<MedicalVisit> getReviewRequestedVisits() {
+    return _medicalVisits.where((m) => m.reviewRequested).toList()
+      ..sort((a, b) => b.reviewRequestedAt!.compareTo(a.reviewRequestedAt!));
+  }
+
+  /// Get active (non-cleared) records
+  List<MedicalVisit> getActiveMedicalRecords() {
+    return _medicalVisits.where((m) => m.status != MedicalStatus.cleared).toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+  }
+
+  /// Get all student users (for officer's student selection)
+  List<AppUser> getStudentUsers() {
+    return _users.where((u) => u.role == UserRole.student).toList();
+  }
+
+  // ════════════════════════════════════════════════════════
+  // GRIEVANCE MODULE
+  // ════════════════════════════════════════════════════════
+
+  /// Student submits a grievance
+  Future<void> submitGrievance({
+    required GrievanceCategory category,
+    required String description,
+    String? imageUrl,
+  }) async {
+    await Future.delayed(const Duration(milliseconds: 300));
+    final user = _currentUser!;
+    _grievances.add(Grievance(
+      id: 'grv_${DateTime.now().millisecondsSinceEpoch}',
+      studentId: user.uid,
+      studentName: user.name,
+      hostelBlock: user.hostelBlock ?? '',
+      roomNumber: user.roomNumber ?? '',
+      category: category,
+      description: description,
+      status: GrievanceStatus.open,
+      imageUrl: imageUrl,
+      assignedTo: 'rt', // auto-assign to RT
+    ));
+    notifyListeners();
+  }
+
+  /// RT/Warden responds to a grievance
+  Future<void> respondToGrievance({
+    required String grievanceId,
+    required String comment,
+  }) async {
+    await Future.delayed(const Duration(milliseconds: 300));
+    final user = _currentUser!;
+    final index = _grievances.indexWhere((g) => g.id == grievanceId);
+    if (index != -1) {
+      final actions = List<GrievanceAction>.from(_grievances[index].actions)
+        ..add(GrievanceAction(
+          actorId: user.uid,
+          actorName: user.name,
+          actorRole: user.role.label,
+          action: 'Responded',
+          comment: comment,
+        ));
+      _grievances[index] = _grievances[index].copyWith(
+        status: GrievanceStatus.underReview,
+        actions: actions,
+      );
+      notifyListeners();
+    }
+  }
+
+  /// Escalate a grievance to the next level
+  Future<void> escalateGrievance({
+    required String grievanceId,
+    String? reason,
+  }) async {
+    await Future.delayed(const Duration(milliseconds: 300));
+    final user = _currentUser!;
+    final index = _grievances.indexWhere((g) => g.id == grievanceId);
+    if (index != -1) {
+      final current = _grievances[index];
+      final newLevel = (current.escalationLevel + 1).clamp(0, 2);
+      final assignedTo = newLevel == 1 ? 'warden' : 'admin';
+
+      final actions = List<GrievanceAction>.from(current.actions)
+        ..add(GrievanceAction(
+          actorId: user.uid,
+          actorName: user.name,
+          actorRole: user.role.label,
+          action: 'Escalated to $assignedTo',
+          comment: reason,
+        ));
+
+      _grievances[index] = current.copyWith(
+        status: GrievanceStatus.escalated,
+        escalationLevel: newLevel,
+        assignedTo: assignedTo,
+        actions: actions,
+      );
+      notifyListeners();
+    }
+  }
+
+  /// Resolve a grievance
+  Future<void> resolveGrievance({
+    required String grievanceId,
+    String? comment,
+  }) async {
+    await Future.delayed(const Duration(milliseconds: 300));
+    final user = _currentUser!;
+    final index = _grievances.indexWhere((g) => g.id == grievanceId);
+    if (index != -1) {
+      final actions = List<GrievanceAction>.from(_grievances[index].actions)
+        ..add(GrievanceAction(
+          actorId: user.uid,
+          actorName: user.name,
+          actorRole: user.role.label,
+          action: 'Resolved',
+          comment: comment,
+        ));
+      _grievances[index] = _grievances[index].copyWith(
+        status: GrievanceStatus.resolved,
+        resolvedAt: DateTime.now(),
+        actions: actions,
+      );
+      notifyListeners();
+    }
+  }
+
+  /// Get grievances for a student
+  List<Grievance> getStudentGrievances(String studentId) {
+    return _grievances.where((g) => g.studentId == studentId).toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+  }
+
+  /// Get grievances assigned to a role
+  List<Grievance> getGrievancesForRole(UserRole role) {
+    String roleKey;
+    switch (role) {
+      case UserRole.rt:
+        roleKey = 'rt';
+        break;
+      case UserRole.warden:
+        roleKey = 'warden';
+        break;
+      case UserRole.admin:
+        roleKey = 'admin';
+        break;
+      default:
+        return [];
+    }
+    return _grievances.where((g) =>
+        g.assignedTo == roleKey &&
+        g.status != GrievanceStatus.resolved).toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+  }
+
+  /// Get all grievances (admin view)
+  List<Grievance> getAllGrievances() {
+    return List.from(_grievances)..sort((a, b) => b.createdAt.compareTo(a.createdAt));
   }
 }
