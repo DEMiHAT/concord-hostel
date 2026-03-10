@@ -6,6 +6,7 @@ import '../models/qr_pass.dart';
 import '../models/attendance.dart';
 import '../models/medical.dart';
 import '../models/grievance.dart';
+import '../models/geofence_attendance.dart';
 
 /// Mock authentication and data service for demo purposes.
 /// Replace with actual Firebase calls when Firebase is configured.
@@ -19,6 +20,9 @@ class MockService extends ChangeNotifier {
   final List<AttendanceException> _attendanceExceptions = [];
   final List<MedicalVisit> _medicalVisits = [];
   final List<Grievance> _grievances = [];
+  final List<GeofenceSession> _geofenceSessions = [];
+  final List<GeofenceCheckIn> _geofenceCheckIns = [];
+  final List<AttendanceAnomaly> _attendanceAnomalies = [];
 
   AppUser? get currentUser => _currentUser;
   List<LeaveRequest> get leaveRequests => List.unmodifiable(_leaveRequests);
@@ -29,6 +33,9 @@ class MockService extends ChangeNotifier {
   List<AttendanceException> get attendanceExceptions => List.unmodifiable(_attendanceExceptions);
   List<MedicalVisit> get medicalVisits => List.unmodifiable(_medicalVisits);
   List<Grievance> get grievances => List.unmodifiable(_grievances);
+  List<GeofenceSession> get geofenceSessions => List.unmodifiable(_geofenceSessions);
+  List<GeofenceCheckIn> get geofenceCheckIns => List.unmodifiable(_geofenceCheckIns);
+  List<AttendanceAnomaly> get attendanceAnomalies => List.unmodifiable(_attendanceAnomalies);
 
   void setBusMode(bool value) {
     _busMode = value;
@@ -108,6 +115,67 @@ class MockService extends ChangeNotifier {
         email: 'kavitha.medical@university.edu',
         role: UserRole.medicalOfficer,
         department: 'Health Services',
+      ),
+      // Additional students for attendance module
+      AppUser(
+        uid: 'student2',
+        name: 'Neha Kumar',
+        email: 'neha@university.edu',
+        role: UserRole.student,
+        rollNumber: 'CS21B1046',
+        hostelBlock: 'Block A',
+        roomNumber: 'A-210',
+        department: 'Computer Science',
+        phone: '+91 98765 43212',
+        parentPhone: '+91 98765 43213',
+      ),
+      AppUser(
+        uid: 'student3',
+        name: 'Rahul Verma',
+        email: 'rahul@university.edu',
+        role: UserRole.student,
+        rollNumber: 'CS21B1047',
+        hostelBlock: 'Block A',
+        roomNumber: 'A-305',
+        department: 'Computer Science',
+        phone: '+91 98765 43214',
+        parentPhone: '+91 98765 43215',
+      ),
+      AppUser(
+        uid: 'student4',
+        name: 'Priya Patel',
+        email: 'priyap@university.edu',
+        role: UserRole.student,
+        rollNumber: 'EC21B1012',
+        hostelBlock: 'Block A',
+        roomNumber: 'A-108',
+        department: 'Electronics',
+        phone: '+91 98765 43216',
+        parentPhone: '+91 98765 43217',
+      ),
+      AppUser(
+        uid: 'student5',
+        name: 'Aditya Singh',
+        email: 'aditya@university.edu',
+        role: UserRole.student,
+        rollNumber: 'ME21B1005',
+        hostelBlock: 'Block A',
+        roomNumber: 'A-412',
+        department: 'Mechanical',
+        phone: '+91 98765 43218',
+        parentPhone: '+91 98765 43219',
+      ),
+      AppUser(
+        uid: 'student6',
+        name: 'Kavya Sharma',
+        email: 'kavya@university.edu',
+        role: UserRole.student,
+        rollNumber: 'CS21B1048',
+        hostelBlock: 'Block A',
+        roomNumber: 'A-202',
+        department: 'Computer Science',
+        phone: '+91 98765 43220',
+        parentPhone: '+91 98765 43221',
       ),
     ]);
 
@@ -286,6 +354,9 @@ class MockService extends ChangeNotifier {
         validUntil: now.add(const Duration(days: 2, hours: 20)),
       ),
     ]);
+
+    // Seed geofence attendance data
+    _initGeofenceData();
   }
 
   // Auth methods
@@ -1179,5 +1250,426 @@ class MockService extends ChangeNotifier {
   /// Get all grievances (admin view)
   List<Grievance> getAllGrievances() {
     return List.from(_grievances)..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+  }
+
+  // ════════════════════════════════════════════════════════
+  // GEOFENCE ATTENDANCE MODULE
+  // ════════════════════════════════════════════════════════
+
+  void _initGeofenceData() {
+    final now = DateTime.now();
+    final blockAStudents = _users.where((u) => u.role == UserRole.student && u.hostelBlock == 'Block A').toList();
+
+    // Create 15 historical sessions over the past 30 days
+    for (int i = 29; i >= 0; i--) {
+      final sessionDate = now.subtract(Duration(days: i));
+      // Skip weekends
+      if (sessionDate.weekday == DateTime.saturday || sessionDate.weekday == DateTime.sunday) continue;
+
+      final sessionStart = DateTime(sessionDate.year, sessionDate.month, sessionDate.day, 21, 0);
+      final sessionEnd = sessionStart.add(const Duration(minutes: 30));
+      final sessionId = 'gfs_${sessionDate.millisecondsSinceEpoch}';
+
+      int markedCount = 0;
+
+      // Each student has varying attendance
+      for (final student in blockAStudents) {
+        // Simulate ~75-95% attendance per student, some students more irregular
+        bool attended;
+        switch (student.uid) {
+          case 'student1': // Arjun - 90% attendance
+            attended = i % 10 != 3;
+            break;
+          case 'student2': // Neha - 95% attendance
+            attended = i % 20 != 7;
+            break;
+          case 'student3': // Rahul - 70% attendance (low)
+            attended = i % 3 != 0;
+            break;
+          case 'student4': // Priya - 85% attendance
+            attended = i % 7 != 2;
+            break;
+          case 'student5': // Aditya - 80% attendance
+            attended = i % 5 != 1;
+            break;
+          case 'student6': // Kavya - 93% attendance
+            attended = i % 15 != 4;
+            break;
+          default:
+            attended = i % 4 != 0;
+        }
+
+        if (attended) {
+          markedCount++;
+          _geofenceCheckIns.add(GeofenceCheckIn(
+            id: 'gfc_${sessionDate.millisecondsSinceEpoch}_${student.uid}',
+            sessionId: sessionId,
+            studentId: student.uid,
+            studentName: student.name,
+            rollNumber: student.rollNumber ?? '',
+            hostelBlock: student.hostelBlock ?? '',
+            timestamp: sessionStart.add(Duration(minutes: (2 + (student.uid.hashCode.abs() % 15)))),
+            insideGeofence: true,
+            distanceFromCenter: 10.0 + (student.uid.hashCode.abs() % 60).toDouble(),
+          ));
+        }
+      }
+
+      _geofenceSessions.add(GeofenceSession(
+        id: sessionId,
+        rtId: 'rt1',
+        rtName: 'Dr. Priya Sharma',
+        hostelBlock: 'Block A',
+        centerLat: 12.9716,
+        centerLng: 77.5946,
+        radiusMeters: 100,
+        startTime: sessionStart,
+        endTime: sessionEnd,
+        status: GeofenceSessionStatus.closed,
+        totalStudents: blockAStudents.length,
+        markedCount: markedCount,
+      ));
+    }
+
+    // Add anomalies for students with low attendance
+    _attendanceAnomalies.addAll([
+      AttendanceAnomaly(
+        id: 'ano_1',
+        studentId: 'student3',
+        studentName: 'Rahul Verma',
+        rollNumber: 'CS21B1047',
+        hostelBlock: 'Block A',
+        type: AnomalyType.frequentAbsence,
+        description: 'Missed 10 out of last 30 sessions. Attendance below 70%.',
+        raisedById: 'rt1',
+        raisedByName: 'Dr. Priya Sharma',
+        raisedAt: now.subtract(const Duration(days: 3)),
+        parentNotified: true,
+      ),
+      AttendanceAnomaly(
+        id: 'ano_2',
+        studentId: 'student5',
+        studentName: 'Aditya Singh',
+        rollNumber: 'ME21B1005',
+        hostelBlock: 'Block A',
+        type: AnomalyType.consecutiveMiss,
+        description: 'Missed 3 consecutive attendance sessions without leave.',
+        raisedById: 'rt1',
+        raisedByName: 'Dr. Priya Sharma',
+        raisedAt: now.subtract(const Duration(days: 1)),
+        parentNotified: true,
+      ),
+      AttendanceAnomaly(
+        id: 'ano_3',
+        studentId: 'student3',
+        studentName: 'Rahul Verma',
+        rollNumber: 'CS21B1047',
+        hostelBlock: 'Block A',
+        type: AnomalyType.lateEntry,
+        description: 'Marked attendance 25 min after window opened on multiple occasions.',
+        raisedById: 'rt1',
+        raisedByName: 'Dr. Priya Sharma',
+        raisedAt: now.subtract(const Duration(days: 7)),
+        parentNotified: true,
+        resolved: true,
+        parentResponse: 'Will speak with my child about punctuality.',
+        resolvedAt: now.subtract(const Duration(days: 5)),
+      ),
+    ]);
+  }
+
+  /// RT opens an attendance window for their block
+  Future<GeofenceSession> openAttendanceWindow({
+    required String hostelBlock,
+    double lat = 12.9716,
+    double lng = 77.5946,
+    double radius = 100.0,
+  }) async {
+    await Future.delayed(const Duration(milliseconds: 400));
+    final rt = _currentUser!;
+    final blockStudents = _users.where(
+      (u) => u.role == UserRole.student && u.hostelBlock == hostelBlock,
+    ).length;
+
+    final session = GeofenceSession(
+      id: 'gfs_${DateTime.now().millisecondsSinceEpoch}',
+      rtId: rt.uid,
+      rtName: rt.name,
+      hostelBlock: hostelBlock,
+      centerLat: lat,
+      centerLng: lng,
+      radiusMeters: radius,
+      startTime: DateTime.now(),
+      totalStudents: blockStudents,
+    );
+
+    _geofenceSessions.add(session);
+    notifyListeners();
+    return session;
+  }
+
+  /// RT closes the active attendance window
+  Future<void> closeAttendanceWindow(String sessionId) async {
+    await Future.delayed(const Duration(milliseconds: 300));
+    final index = _geofenceSessions.indexWhere((s) => s.id == sessionId);
+    if (index != -1) {
+      _geofenceSessions[index] = _geofenceSessions[index].copyWith(
+        status: GeofenceSessionStatus.closed,
+        endTime: DateTime.now(),
+      );
+      notifyListeners();
+    }
+  }
+
+  /// Student marks attendance (simulates geofence verification)
+  Future<String?> markGeofenceAttendance(String sessionId) async {
+    await Future.delayed(const Duration(milliseconds: 400));
+    final student = _currentUser!;
+    final session = _geofenceSessions.firstWhere(
+      (s) => s.id == sessionId,
+      orElse: () => throw Exception('Session not found'),
+    );
+
+    if (session.status != GeofenceSessionStatus.active) {
+      return 'Attendance window is closed';
+    }
+
+    // Check if already marked
+    final alreadyMarked = _geofenceCheckIns.any(
+      (c) => c.sessionId == sessionId && c.studentId == student.uid,
+    );
+    if (alreadyMarked) {
+      return 'Attendance already marked for this session';
+    }
+
+    // Simulate geofence check — always inside for demo
+    final distance = 15.0 + (student.uid.hashCode.abs() % 50).toDouble();
+
+    _geofenceCheckIns.add(GeofenceCheckIn(
+      id: 'gfc_${DateTime.now().millisecondsSinceEpoch}_${student.uid}',
+      sessionId: sessionId,
+      studentId: student.uid,
+      studentName: student.name,
+      rollNumber: student.rollNumber ?? '',
+      hostelBlock: student.hostelBlock ?? '',
+      insideGeofence: true,
+      distanceFromCenter: distance,
+    ));
+
+    // Update session marked count
+    final sessionIndex = _geofenceSessions.indexWhere((s) => s.id == sessionId);
+    if (sessionIndex != -1) {
+      final currentCount = _geofenceCheckIns.where((c) => c.sessionId == sessionId).length;
+      _geofenceSessions[sessionIndex] = _geofenceSessions[sessionIndex].copyWith(
+        markedCount: currentCount,
+      );
+    }
+
+    notifyListeners();
+    return null; // success
+  }
+
+  /// Get active session for a block
+  GeofenceSession? getActiveSession(String hostelBlock) {
+    try {
+      return _geofenceSessions.firstWhere(
+        (s) => s.hostelBlock == hostelBlock && s.status == GeofenceSessionStatus.active,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Get all sessions for a block
+  List<GeofenceSession> getBlockSessions(String hostelBlock) {
+    return _geofenceSessions.where((s) => s.hostelBlock == hostelBlock).toList()
+      ..sort((a, b) => b.startTime.compareTo(a.startTime));
+  }
+
+  /// Get check-ins for a session
+  List<GeofenceCheckIn> getSessionCheckIns(String sessionId) {
+    return _geofenceCheckIns.where((c) => c.sessionId == sessionId).toList()
+      ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
+  }
+
+  /// Check if student already marked attendance for a session
+  bool hasStudentMarkedAttendance(String sessionId, String studentId) {
+    return _geofenceCheckIns.any(
+      (c) => c.sessionId == sessionId && c.studentId == studentId,
+    );
+  }
+
+  /// Get student's geofence attendance percentage
+  double getStudentGeofencePercentage(String studentId) {
+    final studentBlock = _users.firstWhere((u) => u.uid == studentId).hostelBlock ?? '';
+    final blockSessions = _geofenceSessions.where(
+      (s) => s.hostelBlock == studentBlock && s.status == GeofenceSessionStatus.closed,
+    ).toList();
+    if (blockSessions.isEmpty) return 100.0;
+
+    final attended = _geofenceCheckIns.where(
+      (c) => c.studentId == studentId && blockSessions.any((s) => s.id == c.sessionId),
+    ).length;
+
+    return (attended / blockSessions.length * 100).clamp(0, 100);
+  }
+
+  /// Get attendance summary for each student in a block
+  List<StudentAttendanceSummary> getBlockAttendanceSummary(String hostelBlock) {
+    final students = _users.where(
+      (u) => u.role == UserRole.student && u.hostelBlock == hostelBlock,
+    ).toList();
+    final blockSessions = _geofenceSessions.where(
+      (s) => s.hostelBlock == hostelBlock && s.status == GeofenceSessionStatus.closed,
+    ).toList();
+
+    return students.map((student) {
+      final attended = _geofenceCheckIns.where(
+        (c) => c.studentId == student.uid && blockSessions.any((s) => s.id == c.sessionId),
+      ).length;
+      final total = blockSessions.length;
+      final missed = total - attended;
+      final percentage = total > 0 ? (attended / total * 100) : 100.0;
+      final anomalies = _attendanceAnomalies.where((a) => a.studentId == student.uid && !a.resolved).length;
+
+      return StudentAttendanceSummary(
+        studentId: student.uid,
+        studentName: student.name,
+        rollNumber: student.rollNumber ?? '',
+        totalSessions: total,
+        attended: attended,
+        missed: missed,
+        percentage: percentage,
+        anomalyCount: anomalies,
+      );
+    }).toList()
+      ..sort((a, b) => a.percentage.compareTo(b.percentage));
+  }
+
+  /// Get attendance patterns for a department (faculty advisor view)
+  List<StudentAttendanceSummary> getDepartmentAttendancePatterns(String department) {
+    final students = _users.where(
+      (u) => u.role == UserRole.student && u.department == department,
+    ).toList();
+
+    return students.map((student) {
+      final studentBlock = student.hostelBlock ?? '';
+      final blockSessions = _geofenceSessions.where(
+        (s) => s.hostelBlock == studentBlock && s.status == GeofenceSessionStatus.closed,
+      ).toList();
+      final attended = _geofenceCheckIns.where(
+        (c) => c.studentId == student.uid && blockSessions.any((s) => s.id == c.sessionId),
+      ).length;
+      final total = blockSessions.length;
+      final missed = total - attended;
+      final percentage = total > 0 ? (attended / total * 100) : 100.0;
+      final anomalies = _attendanceAnomalies.where((a) => a.studentId == student.uid && !a.resolved).length;
+
+      return StudentAttendanceSummary(
+        studentId: student.uid,
+        studentName: student.name,
+        rollNumber: student.rollNumber ?? '',
+        totalSessions: total,
+        attended: attended,
+        missed: missed,
+        percentage: percentage,
+        anomalyCount: anomalies,
+      );
+    }).toList()
+      ..sort((a, b) => a.percentage.compareTo(b.percentage));
+  }
+
+  /// RT raises an attendance anomaly
+  Future<void> raiseAttendanceAnomaly({
+    required String studentId,
+    required AnomalyType type,
+    required String description,
+  }) async {
+    await Future.delayed(const Duration(milliseconds: 300));
+    final rt = _currentUser!;
+    final student = _users.firstWhere((u) => u.uid == studentId);
+
+    _attendanceAnomalies.add(AttendanceAnomaly(
+      id: 'ano_${DateTime.now().millisecondsSinceEpoch}',
+      studentId: student.uid,
+      studentName: student.name,
+      rollNumber: student.rollNumber ?? '',
+      hostelBlock: student.hostelBlock ?? '',
+      type: type,
+      description: description,
+      raisedById: rt.uid,
+      raisedByName: rt.name,
+      parentNotified: true,
+    ));
+    notifyListeners();
+  }
+
+  /// Get anomalies for a parent's child
+  List<AttendanceAnomaly> getAnomaliesForStudent(String studentId) {
+    return _attendanceAnomalies.where((a) => a.studentId == studentId).toList()
+      ..sort((a, b) => b.raisedAt.compareTo(a.raisedAt));
+  }
+
+  /// Get all anomalies (warden / admin view)
+  List<AttendanceAnomaly> getAllAnomalies() {
+    return List.from(_attendanceAnomalies)
+      ..sort((a, b) => b.raisedAt.compareTo(a.raisedAt));
+  }
+
+  /// Get unresolved anomalies count for a block
+  int getUnresolvedAnomalyCount(String hostelBlock) {
+    return _attendanceAnomalies.where(
+      (a) => a.hostelBlock == hostelBlock && !a.resolved,
+    ).length;
+  }
+
+  /// Resolve an anomaly (with optional parent response)
+  Future<void> resolveAnomaly({
+    required String anomalyId,
+    String? response,
+  }) async {
+    await Future.delayed(const Duration(milliseconds: 300));
+    final index = _attendanceAnomalies.indexWhere((a) => a.id == anomalyId);
+    if (index != -1) {
+      _attendanceAnomalies[index] = _attendanceAnomalies[index].copyWith(
+        resolved: true,
+        parentResponse: response,
+        resolvedAt: DateTime.now(),
+      );
+      notifyListeners();
+    }
+  }
+
+  /// Get all sessions (warden / admin overview)
+  List<GeofenceSession> getAllGeofenceSessions() {
+    return List.from(_geofenceSessions)
+      ..sort((a, b) => b.startTime.compareTo(a.startTime));
+  }
+
+  /// Get overall attendance stats for analytics
+  Map<String, dynamic> getGeofenceAttendanceStats() {
+    final closedSessions = _geofenceSessions.where(
+      (s) => s.status == GeofenceSessionStatus.closed,
+    ).toList();
+
+    if (closedSessions.isEmpty) {
+      return {
+        'totalSessions': 0,
+        'avgAttendance': 0.0,
+        'totalCheckIns': 0,
+        'unresolvedAnomalies': 0,
+      };
+    }
+
+    final totalRate = closedSessions.fold<double>(
+      0, (sum, s) => sum + s.completionRate,
+    ) / closedSessions.length;
+
+    return {
+      'totalSessions': closedSessions.length,
+      'avgAttendance': totalRate * 100,
+      'totalCheckIns': _geofenceCheckIns.length,
+      'unresolvedAnomalies': _attendanceAnomalies.where((a) => !a.resolved).length,
+    };
   }
 }

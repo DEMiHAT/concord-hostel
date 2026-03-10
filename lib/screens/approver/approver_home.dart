@@ -10,6 +10,7 @@ import '../../widgets/glass_widgets.dart';
 import '../shared/attendance_screen.dart';
 import '../shared/medical_screen.dart';
 import '../shared/grievance_screen.dart';
+import '../shared/geofence_attendance_screen.dart';
 
 class ApproverHomeScreen extends StatefulWidget {
   final MockService service;
@@ -278,6 +279,40 @@ class _ApproverHomeScreenState extends State<ApproverHomeScreen> {
               ),
             ],
           ).animate().fadeIn(delay: 500.ms, duration: 400.ms),
+          const SizedBox(height: 10),
+          GlassCard(
+            onTap: () => Navigator.push(context, MaterialPageRoute(
+              builder: (_) => GeofenceAttendanceScreen(service: widget.service),
+            )),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            borderColor: const Color(0xFF8B5CF6).withValues(alpha: 0.2),
+            child: Row(
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF8B5CF6).withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: const Icon(Icons.location_on_rounded, color: Color(0xFF8B5CF6), size: 22),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Geofence Attendance',
+                          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+                      Text('Location-based hostel attendance',
+                          style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
+                    ],
+                  ),
+                ),
+                Icon(Icons.chevron_right_rounded, color: AppColors.textMuted, size: 22),
+              ],
+            ),
+          ).animate().fadeIn(delay: 600.ms, duration: 400.ms),
           const SizedBox(height: 100),
         ],
       ),

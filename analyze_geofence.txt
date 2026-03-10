@@ -1,0 +1,32 @@
+﻿Analyzing concord...                                            
+
+   info - Don't use 'BuildContext's across async gaps - lib\screens\approver\approver_home.dart:549:28 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps - lib\screens\approver\approver_home.dart:620:28 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check - lib\screens\medical_officer\medical_officer_home.dart:601:54 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check - lib\screens\medical_officer\medical_officer_home.dart:620:54 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check - lib\screens\medical_officer\medical_officer_home.dart:638:50 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check - lib\screens\medical_officer\medical_officer_home.dart:811:46 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check - lib\screens\shared\grievance_screen.dart:274:46 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check - lib\screens\shared\grievance_screen.dart:430:54 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check - lib\screens\shared\grievance_screen.dart:486:44 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check - lib\screens\shared\grievance_screen.dart:525:42 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check - lib\screens\shared\medical_screen.dart:474:56 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check - lib\screens\shared\medical_screen.dart:532:42 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps - lib\screens\student\create_leave_screen.dart:118:9 - use_build_context_synchronously
+   info - Don't use 'BuildContext's across async gaps - lib\screens\student\leave_detail_screen.dart:470:28 - use_build_context_synchronously
+
+flutter : 14 issues found. 
+(ran in 2.3s)
+At line:1 char:1
++ flutter analyze 2>&1 | 
+Out-File -Encoding utf8 
+analyze_geofence.txt
++ ~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo           
+   : NotSpecified: (14 issu  
+  es found. (ran in 2.3s):   
+ String) [], RemoteExcept    
+ion
+    + FullyQualifiedErrorId  
+   : NativeCommandError
+ 
