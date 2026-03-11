@@ -6,6 +6,7 @@ import 'core/theme/app_theme.dart';
 import 'services/app_service.dart';
 import 'services/mock_service.dart';
 // import 'services/firebase_service.dart';
+import 'screens/splash_screen.dart';
 import 'screens/login_screen.dart';
 
 /// Toggle this flag to switch between demo (mock) and production (Firebase) mode.
@@ -65,7 +66,9 @@ class _ConcordAppState extends State<ConcordApp> {
       title: 'C.O.N.C.O.R.D.',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.darkTheme,
-      home: LoginScreen(service: _service),
+      home: SplashScreen(
+        nextScreen: LoginScreen(service: _service),
+      ),
       onGenerateRoute: (settings) {
         switch (settings.name) {
           case '/':
