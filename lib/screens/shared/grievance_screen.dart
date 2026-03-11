@@ -4,11 +4,11 @@ import 'package:intl/intl.dart';
 import '../../core/theme/app_theme.dart';
 import '../../models/enums.dart';
 import '../../models/grievance.dart';
-import '../../services/mock_service.dart';
+import '../../services/app_service.dart';
 import '../../widgets/glass_widgets.dart';
 
 class GrievanceScreen extends StatefulWidget {
-  final MockService service;
+  final AppService service;
   final bool isManagementView; // RT/Warden/Admin
   const GrievanceScreen({super.key, required this.service, this.isManagementView = false});
 

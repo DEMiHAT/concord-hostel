@@ -4,12 +4,12 @@ import 'package:intl/intl.dart';
 import '../../core/theme/app_theme.dart';
 import '../../models/enums.dart';
 import '../../models/leave_request.dart';
-import '../../services/mock_service.dart';
+import '../../services/app_service.dart';
 import '../../widgets/glass_widgets.dart';
 import 'qr_pass_screen.dart';
 
 class LeaveDetailScreen extends StatefulWidget {
-  final MockService service;
+  final AppService service;
   final LeaveRequest leave;
 
   const LeaveDetailScreen({

@@ -6,7 +6,7 @@ import '../../models/enums.dart';
 import '../../models/leave_request.dart';
 import '../../models/qr_pass.dart';
 import '../../models/user_model.dart';
-import '../../services/mock_service.dart';
+import '../../services/app_service.dart';
 import '../../widgets/glass_widgets.dart';
 import '../shared/attendance_screen.dart';
 import '../shared/medical_screen.dart';
@@ -17,7 +17,7 @@ import 'leave_detail_screen.dart';
 import 'qr_pass_screen.dart';
 
 class StudentHomeScreen extends StatefulWidget {
-  final MockService service;
+  final AppService service;
   const StudentHomeScreen({super.key, required this.service});
 
   @override
@@ -29,7 +29,8 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final user = widget.service.currentUser!;
+    final user = widget.service.currentUser;
+    if (user == null) return const SizedBox.shrink();
     final leaves = widget.service.getStudentLeaves(user.uid);
     final activePasses = widget.service.getStudentPasses(user.uid)
         .where((p) => p.isActive)
@@ -499,7 +500,9 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
   }
 
   Widget _buildPassesView(List<QrPass> activePasses) {
-    final allPasses = widget.service.getStudentPasses(widget.service.currentUser!.uid);
+    final uid = widget.service.currentUser?.uid;
+    if (uid == null) return const SizedBox.shrink();
+    final allPasses = widget.service.getStudentPasses(uid);
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
       padding: const EdgeInsets.symmetric(horizontal: 20),

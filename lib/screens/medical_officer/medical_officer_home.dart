@@ -5,11 +5,11 @@ import '../../core/theme/app_theme.dart';
 import '../../models/enums.dart';
 import '../../models/medical.dart';
 import '../../models/user_model.dart';
-import '../../services/mock_service.dart';
+import '../../services/app_service.dart';
 import '../../widgets/glass_widgets.dart';
 
 class MedicalOfficerHomeScreen extends StatefulWidget {
-  final MockService service;
+  final AppService service;
   const MedicalOfficerHomeScreen({super.key, required this.service});
 
   @override
@@ -21,7 +21,8 @@ class _MedicalOfficerHomeScreenState extends State<MedicalOfficerHomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final user = widget.service.currentUser!;
+    final user = widget.service.currentUser;
+    if (user == null) return const SizedBox.shrink();
     final allRecords = widget.service.getAllMedicalVisits();
     final activeRecords = widget.service.getActiveMedicalRecords();
     final reviewRequests = widget.service.getReviewRequestedVisits();

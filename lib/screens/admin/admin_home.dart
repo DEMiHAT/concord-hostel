@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:intl/intl.dart';
 import '../../core/theme/app_theme.dart';
-import '../../services/mock_service.dart';
+import '../../services/app_service.dart';
 import '../../widgets/glass_widgets.dart';
 
 class AdminHomeScreen extends StatefulWidget {
-  final MockService service;
+  final AppService service;
   const AdminHomeScreen({super.key, required this.service});
 
   @override

@@ -2,16 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../core/theme/app_theme.dart';
 import '../models/enums.dart';
-import '../services/mock_service.dart';
+import '../services/app_service.dart';
 import '../widgets/glass_widgets.dart';
 import 'student/student_home.dart';
 import 'approver/approver_home.dart';
+import 'parent/parent_home.dart';
 import 'security/security_home.dart';
 import 'admin/admin_home.dart';
 import 'medical_officer/medical_officer_home.dart';
 
 class LoginScreen extends StatefulWidget {
-  final MockService service;
+  final AppService service;
   const LoginScreen({super.key, required this.service});
 
   @override
@@ -56,6 +57,9 @@ class _LoginScreenState extends State<LoginScreen>
           break;
         case UserRole.medicalOfficer:
           screen = MedicalOfficerHomeScreen(service: widget.service);
+          break;
+        case UserRole.parent:
+          screen = ParentHomeScreen(service: widget.service);
           break;
         default:
           screen = ApproverHomeScreen(service: widget.service);

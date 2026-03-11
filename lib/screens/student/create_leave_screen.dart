@@ -3,11 +3,11 @@ import 'package:flutter_animate/flutter_animate.dart';
 import '../../core/theme/app_theme.dart';
 import '../../models/enums.dart';
 import '../../models/leave_request.dart';
-import '../../services/mock_service.dart';
+import '../../services/app_service.dart';
 import '../../widgets/glass_widgets.dart';
 
 class CreateLeaveScreen extends StatefulWidget {
-  final MockService service;
+  final AppService service;
   const CreateLeaveScreen({super.key, required this.service});
 
   @override

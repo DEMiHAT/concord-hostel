@@ -7,10 +7,11 @@ import '../models/attendance.dart';
 import '../models/medical.dart';
 import '../models/grievance.dart';
 import '../models/geofence_attendance.dart';
+import 'app_service.dart';
 
 /// Mock authentication and data service for demo purposes.
 /// Replace with actual Firebase calls when Firebase is configured.
-class MockService extends ChangeNotifier {
+class MockService extends AppService {
   AppUser? _currentUser;
   final List<LeaveRequest> _leaveRequests = [];
   final List<QrPass> _qrPasses = [];
@@ -360,11 +361,18 @@ class MockService extends ChangeNotifier {
   }
 
   // Auth methods
+  @override
   Future<AppUser?> loginWithRole(UserRole role) async {
     await Future.delayed(const Duration(milliseconds: 800));
     _currentUser = _users.firstWhere((u) => u.role == role);
     notifyListeners();
     return _currentUser;
+  }
+
+  @override
+  Future<AppUser?> loginWithEmail(String email, String password) async {
+    // Not supported in demo mode
+    return null;
   }
 
   void logout() {

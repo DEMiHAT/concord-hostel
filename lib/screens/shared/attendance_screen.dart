@@ -3,11 +3,11 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:intl/intl.dart';
 import '../../core/theme/app_theme.dart';
 import '../../models/attendance.dart';
-import '../../services/mock_service.dart';
+import '../../services/app_service.dart';
 import '../../widgets/glass_widgets.dart';
 
 class AttendanceScreen extends StatefulWidget {
-  final MockService service;
+  final AppService service;
   final bool isWardenView;
   const AttendanceScreen({super.key, required this.service, this.isWardenView = false});
 

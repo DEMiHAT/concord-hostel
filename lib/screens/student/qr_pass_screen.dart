@@ -6,11 +6,11 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../../core/theme/app_theme.dart';
 import '../../models/enums.dart';
 import '../../models/qr_pass.dart';
-import '../../services/mock_service.dart';
+import '../../services/app_service.dart';
 import '../../widgets/glass_widgets.dart';
 
 class QrPassScreen extends StatelessWidget {
-  final MockService service;
+  final AppService service;
   final QrPass pass;
 
   const QrPassScreen({super.key, required this.service, required this.pass});

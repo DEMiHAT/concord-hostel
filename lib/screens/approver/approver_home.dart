@@ -5,7 +5,7 @@ import '../../core/theme/app_theme.dart';
 import '../../models/enums.dart';
 import '../../models/leave_request.dart';
 import '../../models/user_model.dart';
-import '../../services/mock_service.dart';
+import '../../services/app_service.dart';
 import '../../widgets/glass_widgets.dart';
 import '../shared/attendance_screen.dart';
 import '../shared/medical_screen.dart';
@@ -13,7 +13,7 @@ import '../shared/grievance_screen.dart';
 import '../shared/geofence_attendance_screen.dart';
 
 class ApproverHomeScreen extends StatefulWidget {
-  final MockService service;
+  final AppService service;
   const ApproverHomeScreen({super.key, required this.service});
 
   @override
@@ -25,7 +25,8 @@ class _ApproverHomeScreenState extends State<ApproverHomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final user = widget.service.currentUser!;
+    final user = widget.service.currentUser;
+    if (user == null) return const SizedBox.shrink();
     final pendingRequests =
         widget.service.getPendingApprovalsForRole(user.role);
     final allRequests = widget.service.leaveRequests;
@@ -466,7 +467,8 @@ class _ApproverHomeScreenState extends State<ApproverHomeScreen> {
   }
 
   Future<void> _approve(LeaveRequest req) async {
-    final user = widget.service.currentUser!;
+    final user = widget.service.currentUser;
+    if (user == null) return;
     await widget.service.approveRequest(
       req.id,
       user.uid,
@@ -535,7 +537,8 @@ class _ApproverHomeScreenState extends State<ApproverHomeScreen> {
     );
 
     if (result == true && mounted) {
-      final user = widget.service.currentUser!;
+      final user = widget.service.currentUser;
+      if (user == null) return;
       await widget.service.rejectRequest(
         req.id,
         user.uid,
@@ -607,7 +610,8 @@ class _ApproverHomeScreenState extends State<ApproverHomeScreen> {
     );
 
     if (result == true && mounted) {
-      final user = widget.service.currentUser!;
+      final user = widget.service.currentUser;
+      if (user == null) return;
       await widget.service.requestDocuments(
         req.id,
         user.uid,

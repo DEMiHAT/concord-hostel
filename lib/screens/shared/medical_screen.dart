@@ -4,14 +4,14 @@ import 'package:intl/intl.dart';
 import '../../core/theme/app_theme.dart';
 import '../../models/enums.dart';
 import '../../models/medical.dart';
-import '../../services/mock_service.dart';
+import '../../services/app_service.dart';
 import '../../widgets/glass_widgets.dart';
 
 /// Medical Screen for Students and Approvers (RT/Faculty/Warden/HoD)
 /// Students: Read-only view of their records + request review
 /// Approvers: View student fitness status + acknowledge intimation
 class MedicalScreen extends StatefulWidget {
-  final MockService service;
+  final AppService service;
   final bool isApproverView; // RT, Faculty, Warden, HoD
   const MedicalScreen({super.key, required this.service, this.isApproverView = false});
 

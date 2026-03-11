@@ -1,0 +1,86 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ─── Helper Functions ───
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function getUserRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+
+    function isRole(role) {
+      return getUserRole() == role;
+    }
+
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+
+    // ─── Users ───
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow write: if isRole('admin');
+    }
+
+    // ─── Leave Requests ───
+    match /leave_requests/{requestId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isRole('student');
+      allow update: if isAuthenticated();
+    }
+
+    // ─── QR Passes ───
+    match /qr_passes/{passId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated()
+        && (isRole('security') || isRole('admin'));
+    }
+
+    // ─── Attendance Records ───
+    match /attendance_records/{recordId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated()
+        && (isRole('rt') || isRole('warden') || isRole('admin'));
+    }
+
+    // ─── Medical Visits ───
+    match /medical_visits/{visitId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isRole('medicalOfficer');
+      allow update: if isAuthenticated();
+    }
+
+    // ─── Grievances ───
+    match /grievances/{grievanceId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isRole('student');
+      allow update: if isAuthenticated();
+    }
+
+    // ─── Geofence Sessions ───
+    match /geofence_sessions/{sessionId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isRole('rt');
+      allow update: if isAuthenticated()
+        && (isRole('rt') || isRole('warden') || isRole('admin'));
+    }
+
+    // ─── Geofence Check-ins ───
+    match /geofence_checkins/{checkInId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isRole('student');
+    }
+
+    // ─── Attendance Anomalies ───
+    match /attendance_anomalies/{anomalyId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated()
+        && (isRole('rt') || isRole('warden') || isRole('admin'));
+      allow update: if isAuthenticated();
+    }
+  }
+}

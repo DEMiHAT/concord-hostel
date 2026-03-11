@@ -4,7 +4,7 @@ import 'package:intl/intl.dart';
 import '../../core/theme/app_theme.dart';
 import '../../models/enums.dart';
 import '../../models/geofence_attendance.dart';
-import '../../services/mock_service.dart';
+import '../../services/app_service.dart';
 import '../../widgets/glass_widgets.dart';
 
 /// Unified geofence attendance screen with role-driven views:
@@ -14,7 +14,7 @@ import '../../widgets/glass_widgets.dart';
 /// - Faculty: department students patterns
 /// - Parent: child percentage + anomaly alerts
 class GeofenceAttendanceScreen extends StatefulWidget {
-  final MockService service;
+  final AppService service;
   const GeofenceAttendanceScreen({super.key, required this.service});
 
   @override

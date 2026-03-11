@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../../core/theme/app_theme.dart';
 import '../../models/enums.dart';
-import '../../services/mock_service.dart';
+import '../../services/app_service.dart';
 import '../../widgets/glass_widgets.dart';
 
 class SecurityHomeScreen extends StatefulWidget {
-  final MockService service;
+  final AppService service;
   const SecurityHomeScreen({super.key, required this.service});
 
   @override
@@ -693,7 +693,8 @@ class _SecurityHomeScreenState extends State<SecurityHomeScreen> {
   }
 
   Widget _buildProfile() {
-    final user = widget.service.currentUser!;
+    final user = widget.service.currentUser;
+    if (user == null) return const SizedBox.shrink();
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
       padding: const EdgeInsets.symmetric(horizontal: 20),
