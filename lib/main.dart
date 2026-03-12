@@ -1,17 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-// import 'package:firebase_core/firebase_core.dart';
-// import 'firebase_options.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
 import 'core/theme/app_theme.dart';
 import 'services/app_service.dart';
 import 'services/mock_service.dart';
-// import 'services/firebase_service.dart';
+import 'services/firebase_service.dart';
 import 'screens/splash_screen.dart';
 import 'screens/login_screen.dart';
 
 /// Toggle this flag to switch between demo (mock) and production (Firebase) mode.
 /// Set to `false` once Firebase is fully configured.
-const bool isDemo = true;
+const bool isDemo = false;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -27,12 +27,11 @@ void main() async {
   );
 
   // Initialize Firebase when not in demo mode.
-  // Uncomment the lines below after running `flutterfire configure`:
-  // if (!isDemo) {
-  //   await Firebase.initializeApp(
-  //     options: DefaultFirebaseOptions.currentPlatform,
-  //   );
-  // }
+  if (!isDemo) {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+  }
 
   runApp(const HailmaryApp());
 }
@@ -54,9 +53,7 @@ class _HailmaryAppState extends State<HailmaryApp> {
     if (isDemo) {
       _service = MockService();
     } else {
-      // Uncomment to enable Firebase:
-      // _service = FirebaseService();
-      _service = MockService(); // Fallback until Firebase is configured
+      _service = FirebaseService();
     }
   }
 

@@ -26,24 +26,99 @@ class StudentHomeScreen extends StatefulWidget {
 
 class _StudentHomeScreenState extends State<StudentHomeScreen> {
   int _currentIndex = 0;
+  bool _isLoading = true;
+  List<LeaveRequest> _leaves = [];
+  List<QrPass> _allPasses = [];
+  List<QrPass> _activePasses = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadData();
+  }
+
+  Future<void> _loadData() async {
+    final user = widget.service.currentUser;
+    if (user == null) return;
+
+    // Try async methods first (FirebaseService), fall back to sync (MockService)
+    List<LeaveRequest> leaves;
+    List<QrPass> passes;
+    try {
+      leaves = await _tryGetStudentLeavesAsync(user.uid);
+      passes = await _tryGetStudentPassesAsync(user.uid);
+    } catch (_) {
+      leaves = widget.service.getStudentLeaves(user.uid);
+      passes = widget.service.getStudentPasses(user.uid);
+    }
+
+    if (mounted) {
+      setState(() {
+        _leaves = leaves;
+        _allPasses = passes;
+        _activePasses = passes.where((p) => p.isActive).toList();
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<List<LeaveRequest>> _tryGetStudentLeavesAsync(String uid) async {
+    // Use reflection-like approach: call the async method if it exists
+    final service = widget.service;
+    // Check if the sync method returns empty (FirebaseService stub)
+    final syncResult = service.getStudentLeaves(uid);
+    if (syncResult.isNotEmpty) return syncResult;
+
+    // Must be FirebaseService — use dynamic call
+    try {
+      final dynamic dynService = service;
+      return await dynService.getStudentLeavesAsync(uid) as List<LeaveRequest>;
+    } catch (_) {
+      return syncResult;
+    }
+  }
+
+  Future<List<QrPass>> _tryGetStudentPassesAsync(String uid) async {
+    final service = widget.service;
+    final syncResult = service.getStudentPasses(uid);
+    if (syncResult.isNotEmpty) return syncResult;
+
+    try {
+      final dynamic dynService = service;
+      return await dynService.getStudentPassesAsync(uid) as List<QrPass>;
+    } catch (_) {
+      return syncResult;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final user = widget.service.currentUser;
     if (user == null) return const SizedBox.shrink();
-    final leaves = widget.service.getStudentLeaves(user.uid);
-    final activePasses = widget.service.getStudentPasses(user.uid)
-        .where((p) => p.isActive)
-        .toList();
+
+    if (_isLoading) {
+      return GlassScaffold(
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(color: AppColors.primaryStart),
+              const SizedBox(height: 16),
+              Text('Loading...', style: TextStyle(color: AppColors.textMuted)),
+            ],
+          ),
+        ),
+      );
+    }
 
     return GlassScaffold(
       bottomNavigationBar: _buildBottomNav(),
       body: IndexedStack(
         index: _currentIndex,
         children: [
-          _buildDashboard(user, leaves, activePasses),
-          _buildLeaveHistory(leaves),
-          _buildPassesView(activePasses),
+          _buildDashboard(user, _leaves, _activePasses),
+          _buildLeaveHistory(_leaves),
+          _buildPassesView(_activePasses),
           _buildProfileView(user),
         ],
       ),
@@ -254,7 +329,7 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
                   builder: (_) => CreateLeaveScreen(service: widget.service),
                 ),
               );
-              setState(() {});
+              _loadData();
             },
           ).animate().fadeIn(delay: 400.ms, duration: 400.ms),
           const SizedBox(height: 24),
@@ -502,7 +577,7 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
   Widget _buildPassesView(List<QrPass> activePasses) {
     final uid = widget.service.currentUser?.uid;
     if (uid == null) return const SizedBox.shrink();
-    final allPasses = widget.service.getStudentPasses(uid);
+    final allPasses = _allPasses;
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
       padding: const EdgeInsets.symmetric(horizontal: 20),

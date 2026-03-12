@@ -19,23 +19,90 @@ class ParentHomeScreen extends StatefulWidget {
 
 class _ParentHomeScreenState extends State<ParentHomeScreen> {
   int _currentIndex = 0;
+  bool _isLoading = true;
+  List<LeaveRequest> _pendingRequests = [];
+  List<LeaveRequest> _allRequests = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadData();
+  }
+
+  Future<void> _loadData() async {
+    final user = widget.service.currentUser;
+    if (user == null) return;
+
+    List<LeaveRequest> pending;
+    List<LeaveRequest> all;
+
+    try {
+      pending = await _tryGetPendingAsync();
+      all = await _tryGetAllAsync();
+    } catch (_) {
+      pending = widget.service.getPendingApprovalsForRole(UserRole.parent);
+      all = widget.service.leaveRequests;
+    }
+
+    if (mounted) {
+      setState(() {
+        _pendingRequests = pending;
+        _allRequests = all;
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<List<LeaveRequest>> _tryGetPendingAsync() async {
+    final syncResult = widget.service.getPendingApprovalsForRole(UserRole.parent);
+    if (syncResult.isNotEmpty) return syncResult;
+    try {
+      final dynamic svc = widget.service;
+      return await svc.getPendingApprovalsForRoleAsync(UserRole.parent) as List<LeaveRequest>;
+    } catch (_) {
+      return syncResult;
+    }
+  }
+
+  Future<List<LeaveRequest>> _tryGetAllAsync() async {
+    final syncResult = widget.service.leaveRequests;
+    if (syncResult.isNotEmpty) return syncResult;
+    try {
+      final dynamic svc = widget.service;
+      return await svc.getAllLeaveRequestsAsync() as List<LeaveRequest>;
+    } catch (_) {
+      return syncResult;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final user = widget.service.currentUser;
     if (user == null) return const SizedBox.shrink();
-    final pendingRequests =
-        widget.service.getPendingApprovalsForRole(UserRole.parent);
-    final allRequests = widget.service.leaveRequests;
+
+    if (_isLoading) {
+      return GlassScaffold(
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(color: AppColors.accentAmber),
+              const SizedBox(height: 16),
+              Text('Loading...', style: TextStyle(color: AppColors.textMuted)),
+            ],
+          ),
+        ),
+      );
+    }
 
     return GlassScaffold(
-      bottomNavigationBar: _buildBottomNav(pendingRequests.length),
+      bottomNavigationBar: _buildBottomNav(_pendingRequests.length),
       body: IndexedStack(
         index: _currentIndex,
         children: [
-          _buildDashboard(user, pendingRequests, allRequests),
-          _buildPendingList(pendingRequests),
-          _buildChildInfo(user, allRequests),
+          _buildDashboard(user, _pendingRequests, _allRequests),
+          _buildPendingList(_pendingRequests),
+          _buildChildInfo(user, _allRequests),
           _buildProfile(user),
         ],
       ),
@@ -100,7 +167,7 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
     final childRequests = all;
     final approvedCount =
         childRequests.where((r) => r.status == LeaveStatus.approved).length;
-    final activeQrCount = widget.service.qrPasses.where((p) => p.isActive).length;
+    final activeQrCount = childRequests.where((r) => r.qrPassId != null && r.status == LeaveStatus.approved).length;
 
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
@@ -728,7 +795,7 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
       user.name,
       user.role.label,
     );
-    setState(() {});
+    _loadData();
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -801,7 +868,7 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
             ? 'Rejected by parent'
             : reasonController.text.trim(),
       );
-      setState(() {});
+      _loadData();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Request rejected'),

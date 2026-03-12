@@ -63,6 +63,17 @@ class FirebaseService extends AppService {
   @override
   List<LeaveRequest> get leaveRequests => []; // Use stream or fetch methods instead
 
+  /// Async version to fetch all leave requests.
+  Future<List<LeaveRequest>> getAllLeaveRequestsAsync() async {
+    final snap = await _db
+        .collection('leave_requests')
+        .orderBy('createdAt', descending: true)
+        .get();
+    return snap.docs
+        .map((d) => LeaveRequest.fromFirestore(d.data(), d.id))
+        .toList();
+  }
+
   @override
   List<LeaveRequest> getStudentLeaves(String studentId) {
     // For synchronous compatibility, return empty.

@@ -1,0 +1,36 @@
+{
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "concord-hostel",
+          "appId": "1:381395874421:android:c275ae168912eb722bfe3c",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "concord-hostel",
+          "configurations": {
+            "android": "1:381395874421:android:c275ae168912eb722bfe3c",
+            "web": "1:381395874421:web:06f1e2bf250c52c92bfe3c"
+          }
+        }
+      }
+    }
+  },
+  "firestore": {
+    "database": "(default)",
+    "location": "nam5",
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "auth": {
+    "providers": {
+      "googleSignIn": {
+        "oAuthBrandDisplayName": "Concord Hostel",
+        "supportEmail": "support@undefined.firebaseapp.com"
+      }
+    }
+  }
+}

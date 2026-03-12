@@ -22,23 +22,107 @@ class ApproverHomeScreen extends StatefulWidget {
 
 class _ApproverHomeScreenState extends State<ApproverHomeScreen> {
   int _currentIndex = 0;
+  bool _isLoading = true;
+  List<LeaveRequest> _pendingRequests = [];
+  List<LeaveRequest> _allRequests = [];
+  Map<String, int> _stats = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _loadData();
+  }
+
+  Future<void> _loadData() async {
+    final user = widget.service.currentUser;
+    if (user == null) return;
+
+    List<LeaveRequest> pending;
+    List<LeaveRequest> all;
+    Map<String, int> stats;
+
+    try {
+      // Try async methods (FirebaseService)
+      pending = await _tryGetPendingAsync(user.role);
+      all = await _tryGetAllRequestsAsync();
+      stats = await _tryGetStatsAsync();
+    } catch (_) {
+      pending = widget.service.getPendingApprovalsForRole(user.role);
+      all = widget.service.leaveRequests;
+      stats = widget.service.getStats();
+    }
+
+    if (mounted) {
+      setState(() {
+        _pendingRequests = pending;
+        _allRequests = all;
+        _stats = stats;
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<List<LeaveRequest>> _tryGetPendingAsync(UserRole role) async {
+    final syncResult = widget.service.getPendingApprovalsForRole(role);
+    if (syncResult.isNotEmpty) return syncResult;
+    try {
+      final dynamic svc = widget.service;
+      return await svc.getPendingApprovalsForRoleAsync(role) as List<LeaveRequest>;
+    } catch (_) {
+      return syncResult;
+    }
+  }
+
+  Future<List<LeaveRequest>> _tryGetAllRequestsAsync() async {
+    final syncResult = widget.service.leaveRequests;
+    if (syncResult.isNotEmpty) return syncResult;
+    try {
+      final dynamic svc = widget.service;
+      return await svc.getAllLeaveRequestsAsync() as List<LeaveRequest>;
+    } catch (_) {
+      return syncResult;
+    }
+  }
+
+  Future<Map<String, int>> _tryGetStatsAsync() async {
+    final syncResult = widget.service.getStats();
+    if (syncResult.values.any((v) => v > 0)) return syncResult;
+    try {
+      final dynamic svc = widget.service;
+      return await svc.getStatsAsync() as Map<String, int>;
+    } catch (_) {
+      return syncResult;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final user = widget.service.currentUser;
     if (user == null) return const SizedBox.shrink();
-    final pendingRequests =
-        widget.service.getPendingApprovalsForRole(user.role);
-    final allRequests = widget.service.leaveRequests;
+
+    if (_isLoading) {
+      return GlassScaffold(
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(color: AppColors.primaryStart),
+              const SizedBox(height: 16),
+              Text('Loading...', style: TextStyle(color: AppColors.textMuted)),
+            ],
+          ),
+        ),
+      );
+    }
 
     return GlassScaffold(
       bottomNavigationBar: _buildBottomNav(),
       body: IndexedStack(
         index: _currentIndex,
         children: [
-          _buildDashboard(user, pendingRequests),
-          _buildPendingList(pendingRequests),
-          _buildAllRequests(allRequests),
+          _buildDashboard(user, _pendingRequests),
+          _buildPendingList(_pendingRequests),
+          _buildAllRequests(_allRequests),
           _buildProfile(user),
         ],
       ),
@@ -91,7 +175,7 @@ class _ApproverHomeScreenState extends State<ApproverHomeScreen> {
   }
 
   Widget _buildDashboard(AppUser user, List<LeaveRequest> pendingRequests) {
-    final stats = widget.service.getStats();
+    final stats = _stats;
 
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
@@ -475,7 +559,7 @@ class _ApproverHomeScreenState extends State<ApproverHomeScreen> {
       user.name,
       user.role.label,
     );
-    setState(() {});
+    _loadData();
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -548,7 +632,7 @@ class _ApproverHomeScreenState extends State<ApproverHomeScreen> {
             ? 'Rejected'
             : reasonController.text.trim(),
       );
-      setState(() {});
+      _loadData();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Request rejected'),
@@ -620,7 +704,7 @@ class _ApproverHomeScreenState extends State<ApproverHomeScreen> {
             ? 'Please upload supporting documents'
             : commentController.text.trim(),
       );
-      setState(() {});
+      _loadData();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Documents requested from student 📄'),
