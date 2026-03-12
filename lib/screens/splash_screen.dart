@@ -300,7 +300,7 @@ class _SplashScreenState extends State<SplashScreen>
                       ),
                       const SizedBox(height: 36),
 
-                      // Title: C.O.N.C.O.R.D.
+                      // Title: H.A.I.L.M.A.R.Y.
                       Transform.translate(
                         offset: Offset(0, _titleSlide.value),
                         child: Opacity(
@@ -313,7 +313,7 @@ class _SplashScreenState extends State<SplashScreen>
                               ],
                             ).createShader(bounds),
                             child: Text(
-                              'C.O.N.C.O.R.D.',
+                              'H.A.I.L.M.A.R.Y.',
                               style: GoogleFonts.inter(
                                 fontSize: 32,
                                 fontWeight: FontWeight.w900,
@@ -350,7 +350,7 @@ class _SplashScreenState extends State<SplashScreen>
                       Opacity(
                         opacity: _subtitleFade.value,
                         child: Text(
-                          'Campus Outgoing Non-resident\nControl, Oversight, Records & Documentation',
+                          'Hostel Administrative Intelligence\n& Logistics Management for Access,\nRegulation and Systems',
                           textAlign: TextAlign.center,
                           style: GoogleFonts.inter(
                             fontSize: 13,
@@ -377,7 +377,7 @@ class _SplashScreenState extends State<SplashScreen>
                             color: Colors.white.withValues(alpha: 0.04),
                           ),
                           child: Text(
-                            'Hostel Management System',
+                            'Smart Hostel Management',
                             style: GoogleFonts.inter(
                               fontSize: 12,
                               fontWeight: FontWeight.w500,

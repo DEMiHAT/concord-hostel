@@ -34,17 +34,17 @@ void main() async {
   //   );
   // }
 
-  runApp(const ConcordApp());
+  runApp(const HailmaryApp());
 }
 
-class ConcordApp extends StatefulWidget {
-  const ConcordApp({super.key});
+class HailmaryApp extends StatefulWidget {
+  const HailmaryApp({super.key});
 
   @override
-  State<ConcordApp> createState() => _ConcordAppState();
+  State<HailmaryApp> createState() => _HailmaryAppState();
 }
 
-class _ConcordAppState extends State<ConcordApp> {
+class _HailmaryAppState extends State<HailmaryApp> {
   late final AppService _service;
 
   @override
@@ -63,7 +63,7 @@ class _ConcordAppState extends State<ConcordApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'C.O.N.C.O.R.D.',
+      title: 'H.A.I.L.M.A.R.Y.',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.darkTheme,
       home: SplashScreen(

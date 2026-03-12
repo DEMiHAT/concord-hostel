@@ -129,7 +129,7 @@ class _LoginScreenState extends State<LoginScreen>
                 .scale(begin: const Offset(0.5, 0.5)),
             const SizedBox(height: 20),
             Text(
-              'C.O.N.C.O.R.D.',
+              'H.A.I.L.M.A.R.Y.',
               style: Theme.of(context).textTheme.displayMedium?.copyWith(
                     fontWeight: FontWeight.w900,
                     letterSpacing: 3,
@@ -146,7 +146,7 @@ class _LoginScreenState extends State<LoginScreen>
             ).animate().fadeIn(delay: 200.ms, duration: 600.ms),
             const SizedBox(height: 8),
             Text(
-              'Campus Outgoing Non-resident\nControl, Oversight, Records & Documentation',
+              'Hostel Administrative Intelligence\n& Logistics Management for Access, Regulation and Systems',
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: AppColors.textSecondary,

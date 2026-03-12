@@ -108,7 +108,7 @@ class QrPassScreen extends StatelessWidget {
                       ],
                     ),
                     child: QrImageView(
-                      data: 'CONCORD:${pass.id}:${pass.studentId}:${pass.state.firestoreValue}',
+                      data: 'HAILMARY:${pass.id}:${pass.studentId}:${pass.state.firestoreValue}',
                       version: QrVersions.auto,
                       size: 200,
                       eyeStyle: QrEyeStyle(

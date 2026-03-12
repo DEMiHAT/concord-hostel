@@ -8,7 +8,7 @@ import '../models/medical.dart';
 import '../models/grievance.dart';
 import '../models/geofence_attendance.dart';
 
-/// Abstract service contract for the Concord system.
+/// Abstract service contract for the HAILMARY system.
 /// Both [MockService] (demo) and [FirebaseService] (production) implement this.
 abstract class AppService extends ChangeNotifier {
   // ════════════════════════════════════════════════════════
