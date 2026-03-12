@@ -597,6 +597,49 @@ class MockService extends AppService {
     }
   }
 
+  // QR Pass Generation
+  @override
+  Future<QrPass?> generateQrPass(String leaveRequestId) async {
+    await Future.delayed(const Duration(milliseconds: 500));
+
+    final reqIndex = _leaveRequests.indexWhere((l) => l.id == leaveRequestId);
+    if (reqIndex == -1) return null;
+
+    final request = _leaveRequests[reqIndex];
+
+    // Only generate for approved requests
+    if (request.status != LeaveStatus.approved) return null;
+
+    // Check if already has a pass
+    if (request.qrPassId != null) {
+      return getQrPass(request.qrPassId!);
+    }
+
+    // Generate new pass
+    final passId = 'QP${DateTime.now().millisecondsSinceEpoch}';
+    final newPass = QrPass(
+      id: passId,
+      leaveRequestId: leaveRequestId,
+      studentId: request.studentId,
+      studentName: request.studentName,
+      studentRollNumber: request.studentRollNumber,
+      state: QrState.unused,
+      validFrom: request.fromDate,
+      validUntil: request.toDate,
+    );
+
+    _qrPasses.add(newPass);
+
+    // Link pass to leave request
+    _leaveRequests[reqIndex] = request.copyWith(
+      qrPassId: passId,
+      updatedAt: DateTime.now(),
+    );
+
+    notifyListeners();
+    return newPass;
+  }
+
   // QR methods
   QrPass? getQrPass(String passId) {
     try {

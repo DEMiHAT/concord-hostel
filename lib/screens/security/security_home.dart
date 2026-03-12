@@ -6,6 +6,7 @@ import '../../models/enums.dart';
 import '../../models/qr_pass.dart';
 import '../../models/user_model.dart';
 import '../../services/app_service.dart';
+import '../../services/qr_generation_service.dart';
 import '../../widgets/glass_widgets.dart';
 
 class SecurityHomeScreen extends StatefulWidget {
@@ -951,8 +952,31 @@ class _SecurityHomeScreenState extends State<SecurityHomeScreen> {
       return;
     }
 
+    final pass = passes.first;
+
+    // Simulate V2 QR generation and parsing (as if scanned from student's phone)
+    final simulatedQrData = QrGenerationService.generateQrData(
+      passId: pass.id,
+      studentId: pass.studentId,
+      stateValue: pass.state.firestoreValue,
+    );
+    final scanResult = QrGenerationService.parseQrData(simulatedQrData);
+
+    if (!scanResult.isValid) {
+      setState(() {
+        _isScanning = false;
+        _scanResult = '✗ ${scanResult.error ?? "Invalid QR code"}';
+      });
+      return;
+    }
+
+    final verificationCode = QrGenerationService.generateVerificationCode(
+      pass.id,
+      pass.studentId,
+    );
+
     final error = await widget.service.scanQr(
-      passes.first.id,
+      scanResult.passId!,
       _selectedGate,
       action,
       laneType: _selectedGate == GateType.hostel ? _selectedLane : null,
@@ -968,8 +992,9 @@ class _SecurityHomeScreenState extends State<SecurityHomeScreen> {
         final laneInfo = _selectedGate == GateType.hostel
             ? ' (${_selectedLane.label})'
             : '';
+        final format = scanResult.isLegacy ? ' [V1]' : ' [V2 ✓]';
         _scanResult =
-            '✓ ${action == 'exit' ? 'EXIT' : 'ENTRY'} recorded at $gateName$laneInfo';
+            '✓ ${action == 'exit' ? 'EXIT' : 'ENTRY'} recorded at $gateName$laneInfo$format\nVerification: $verificationCode';
       }
     });
   }

@@ -346,7 +346,7 @@ class _LeaveDetailScreenState extends State<LeaveDetailScreen> {
               ),
             ],
 
-            // QR Pass button
+            // QR Pass section
             if (leave.qrPassId != null) ...[
               const SizedBox(height: 8),
               SizedBox(
@@ -360,6 +360,36 @@ class _LeaveDetailScreenState extends State<LeaveDetailScreen> {
                   onPressed: () {
                     final pass = widget.service.getQrPass(leave.qrPassId!);
                     if (pass != null) {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              QrPassScreen(service: widget.service, pass: pass),
+                        ),
+                      );
+                    }
+                  },
+                ),
+              ),
+            ] else if (leave.status == LeaveStatus.approved) ...[
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: GlassButton(
+                  label: 'Generate QR Pass',
+                  icon: Icons.qr_code_2_rounded,
+                  gradient: const LinearGradient(
+                    colors: [AppColors.primaryStart, AppColors.primaryEnd],
+                  ),
+                  onPressed: () async {
+                    final pass = await widget.service.generateQrPass(_leave.id);
+                    if (pass != null && mounted) {
+                      // Refresh the leave request to get the linked pass ID
+                      final updated = widget.service.leaveRequests.firstWhere(
+                        (l) => l.id == _leave.id,
+                        orElse: () => _leave,
+                      );
+                      setState(() => _leave = updated);
                       Navigator.push(
                         context,
                         MaterialPageRoute(

@@ -409,6 +409,41 @@ class FirebaseService extends AppService {
   }
 
   @override
+  Future<QrPass?> generateQrPass(String leaveRequestId) async {
+    final doc = await _db.collection('leave_requests').doc(leaveRequestId).get();
+    if (!doc.exists) return null;
+
+    final request = LeaveRequest.fromFirestore(doc.data()!, doc.id);
+    if (request.status != LeaveStatus.approved) return null;
+
+    // Return existing pass if already generated
+    if (request.qrPassId != null) {
+      return await getQrPassAsync(request.qrPassId!);
+    }
+
+    final passId = 'QP${DateTime.now().millisecondsSinceEpoch}';
+    final newPass = QrPass(
+      id: passId,
+      leaveRequestId: leaveRequestId,
+      studentId: request.studentId,
+      studentName: request.studentName,
+      studentRollNumber: request.studentRollNumber,
+      state: QrState.unused,
+      validFrom: request.fromDate,
+      validUntil: request.toDate,
+    );
+
+    await _db.collection('qr_passes').doc(passId).set(newPass.toFirestore());
+    await _db.collection('leave_requests').doc(leaveRequestId).update({
+      'qrPassId': passId,
+      'updatedAt': Timestamp.fromDate(DateTime.now()),
+    });
+
+    notifyListeners();
+    return newPass;
+  }
+
+  @override
   bool get busMode => _busMode;
 
   @override

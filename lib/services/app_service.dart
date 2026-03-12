@@ -82,6 +82,10 @@ abstract class AppService extends ChangeNotifier {
     LaneType? laneType,
   });
 
+  /// Generate a QR pass for an approved leave request.
+  /// Returns the generated [QrPass] or null if the request is not approved.
+  Future<QrPass?> generateQrPass(String leaveRequestId);
+
   bool get busMode;
   void setBusMode(bool value);
 
