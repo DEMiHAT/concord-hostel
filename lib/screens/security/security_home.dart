@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:intl/intl.dart';
 import '../../core/theme/app_theme.dart';
 import '../../models/enums.dart';
+import '../../models/qr_pass.dart';
+import '../../models/user_model.dart';
 import '../../services/app_service.dart';
 import '../../widgets/glass_widgets.dart';
 
@@ -20,7 +23,8 @@ class _SecurityHomeScreenState extends State<SecurityHomeScreen> {
   String _scanResult = '';
   bool _isScanning = false;
   final TextEditingController _exceptionController = TextEditingController();
-  final TextEditingController _exceptionReasonController = TextEditingController();
+  final TextEditingController _exceptionReasonController =
+      TextEditingController();
 
   @override
   void dispose() {
@@ -31,20 +35,29 @@ class _SecurityHomeScreenState extends State<SecurityHomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final user = widget.service.currentUser;
+    if (user == null) return const SizedBox.shrink();
+
+    final activePasses =
+        widget.service.qrPasses.where((p) => p.isActive).toList();
+
     return GlassScaffold(
-      bottomNavigationBar: _buildBottomNav(),
+      bottomNavigationBar: _buildBottomNav(activePasses.length),
       body: IndexedStack(
         index: _currentIndex,
         children: [
+          _buildDashboard(user, activePasses),
           _buildScanView(),
-          _buildActivePasses(),
-          _buildProfile(),
+          _buildActivePasses(activePasses),
+          _buildProfile(user),
         ],
       ),
     );
   }
 
-  Widget _buildBottomNav() {
+  // ─── Bottom Navigation ───────────────────────────────
+
+  Widget _buildBottomNav(int activeCount) {
     return Container(
       margin: const EdgeInsets.all(16),
       child: ClipRRect(
@@ -65,16 +78,25 @@ class _SecurityHomeScreenState extends State<SecurityHomeScreen> {
             unselectedItemColor: AppColors.textMuted,
             selectedFontSize: 11,
             unselectedFontSize: 10,
-            items: const [
-              BottomNavigationBarItem(
+            items: [
+              const BottomNavigationBarItem(
+                icon: Icon(Icons.dashboard_rounded),
+                label: 'Home',
+              ),
+              const BottomNavigationBarItem(
                 icon: Icon(Icons.qr_code_scanner_rounded),
-                label: 'Scan',
+                label: 'Scan QR',
               ),
               BottomNavigationBarItem(
-                icon: Icon(Icons.badge_rounded),
-                label: 'Active',
+                icon: Badge(
+                  isLabelVisible: activeCount > 0,
+                  label:
+                      Text('$activeCount', style: const TextStyle(fontSize: 9)),
+                  child: const Icon(Icons.badge_rounded),
+                ),
+                label: 'Passes',
               ),
-              BottomNavigationBarItem(
+              const BottomNavigationBarItem(
                 icon: Icon(Icons.person_rounded),
                 label: 'Profile',
               ),
@@ -85,6 +107,415 @@ class _SecurityHomeScreenState extends State<SecurityHomeScreen> {
     );
   }
 
+  // ─── Dashboard (Home) ────────────────────────────────
+
+  Widget _buildDashboard(AppUser user, List<QrPass> activePasses) {
+    final todayAttendance = widget.service.getTodayAttendance();
+    final totalPasses = widget.service.qrPasses.length;
+    final now = DateTime.now();
+    final greeting = now.hour < 12
+        ? 'Good Morning'
+        : now.hour < 17
+            ? 'Good Afternoon'
+            : 'Good Evening';
+
+    return SingleChildScrollView(
+      physics: const BouncingScrollPhysics(),
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 16),
+
+          // Greeting row
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '$greeting 👋',
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                    Text(
+                      user.name,
+                      style: Theme.of(context).textTheme.headlineLarge,
+                    ),
+                    const SizedBox(height: 4),
+                    StatusBadge(
+                      label: 'Security Personnel',
+                      color: AppColors.primaryStart,
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  gradient: AppColors.primaryGradient,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.primaryStart.withValues(alpha: 0.2),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: const Icon(Icons.shield_rounded,
+                    color: Colors.white, size: 26),
+              ),
+            ],
+          ).animate().fadeIn(duration: 400.ms),
+          const SizedBox(height: 20),
+
+          // Date & time card
+          GlassCard(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            borderColor: AppColors.accentCyan.withValues(alpha: 0.2),
+            child: Row(
+              children: [
+                Icon(Icons.calendar_today_rounded,
+                    color: AppColors.accentCyan, size: 18),
+                const SizedBox(width: 10),
+                Text(
+                  DateFormat('EEEE, dd MMMM yyyy').format(now),
+                  style: TextStyle(
+                    color: AppColors.textPrimary,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                  ),
+                ),
+                const Spacer(),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppColors.accentGreen.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    'On Duty',
+                    style: TextStyle(
+                      color: AppColors.accentGreen,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ).animate().fadeIn(delay: 100.ms, duration: 400.ms),
+
+          // Bus Mode banner
+          if (widget.service.busMode) ...[
+            const SizedBox(height: 8),
+            GlassCard(
+              borderColor: AppColors.accentGreen.withValues(alpha: 0.4),
+              backgroundColor: AppColors.accentGreen.withValues(alpha: 0.05),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Row(
+                children: [
+                  const Icon(Icons.directions_bus_rounded,
+                      color: AppColors.accentGreen, size: 20),
+                  const SizedBox(width: 10),
+                  const Expanded(
+                    child: Text(
+                      '🚌 Bus Mode is ON — Bus lane is enabled at hostel gate',
+                      style: TextStyle(
+                        color: AppColors.accentGreen,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ).animate().fadeIn(duration: 300.ms),
+          ],
+          const SizedBox(height: 16),
+
+          // Quick stats
+          Text('Today\'s Overview',
+              style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: _quickStat(
+                  'Students Out',
+                  '${todayAttendance['stillOut'] ?? 0}',
+                  Icons.directions_walk_rounded,
+                  AppColors.accentAmber,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _quickStat(
+                  'Returned',
+                  '${todayAttendance['returned'] ?? 0}',
+                  Icons.home_rounded,
+                  AppColors.accentGreen,
+                ),
+              ),
+            ],
+          ).animate().fadeIn(delay: 200.ms, duration: 400.ms),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: _quickStat(
+                  'Active Passes',
+                  '${activePasses.length}',
+                  Icons.qr_code_rounded,
+                  AppColors.accentCyan,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _quickStat(
+                  'Total Passes',
+                  '$totalPasses',
+                  Icons.receipt_long_rounded,
+                  AppColors.primaryStart,
+                ),
+              ),
+            ],
+          ).animate().fadeIn(delay: 300.ms, duration: 400.ms),
+          const SizedBox(height: 24),
+
+          // Quick actions
+          Text('Quick Actions', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 10),
+          _actionTile(
+            icon: Icons.qr_code_scanner_rounded,
+            title: 'Scan QR Pass',
+            subtitle: 'Scan a student\'s gate pass to record entry or exit',
+            color: AppColors.accentCyan,
+            onTap: () => setState(() => _currentIndex = 1),
+          ).animate().fadeIn(delay: 400.ms, duration: 400.ms),
+          _actionTile(
+            icon: Icons.badge_rounded,
+            title: 'View Active Passes',
+            subtitle: 'See all students who currently have active gate passes',
+            color: AppColors.accentAmber,
+            onTap: () => setState(() => _currentIndex = 2),
+          ).animate().fadeIn(delay: 500.ms, duration: 400.ms),
+          const SizedBox(height: 24),
+
+          // Recent activity (from gate logs)
+          Text('Recent Gate Activity',
+              style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 10),
+          ..._buildRecentActivity(),
+          const SizedBox(height: 100),
+        ],
+      ),
+    );
+  }
+
+  Widget _quickStat(String label, String value, IconData icon, Color color) {
+    return GlassCard(
+      padding: const EdgeInsets.all(14),
+      child: Row(
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.10),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, color: color, size: 20),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  value,
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    color: AppColors.textMuted,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _actionTile({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return GlassCard(
+      onTap: onTap,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      borderColor: color.withValues(alpha: 0.15),
+      child: Row(
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.10),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Icon(icon, color: color, size: 24),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title,
+                    style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textPrimary)),
+                const SizedBox(height: 2),
+                Text(subtitle,
+                    style: TextStyle(
+                        fontSize: 12, color: AppColors.textSecondary)),
+              ],
+            ),
+          ),
+          Icon(Icons.chevron_right_rounded,
+              color: AppColors.textMuted, size: 22),
+        ],
+      ),
+    );
+  }
+
+  List<Widget> _buildRecentActivity() {
+    final allLogs = widget.service.getAllGateLogs();
+    final recentLogs = allLogs.take(5).toList();
+
+    if (recentLogs.isEmpty) {
+      return [
+        GlassCard(
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                children: [
+                  Icon(Icons.history_rounded,
+                      size: 40, color: AppColors.textMuted),
+                  const SizedBox(height: 8),
+                  Text('No gate activity yet',
+                      style: TextStyle(
+                          color: AppColors.textMuted, fontSize: 14)),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ];
+    }
+
+    return recentLogs.map<Widget>((log) {
+      final isEntry = log['action'] == 'entry';
+      final timeFormat = DateFormat('hh:mm a');
+      final gateLabel = log['gateType'] == 'hostel' ? 'Hostel Gate' : 'Main Gate';
+
+      return GlassCard(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        child: Row(
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: (isEntry ? AppColors.accentGreen : AppColors.accentAmber)
+                    .withValues(alpha: 0.10),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(
+                isEntry ? Icons.login_rounded : Icons.logout_rounded,
+                color:
+                    isEntry ? AppColors.accentGreen : AppColors.accentAmber,
+                size: 18,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${log['studentName']}',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  Text(
+                    '${log['rollNumber']} • $gateLabel',
+                    style: TextStyle(
+                        fontSize: 11, color: AppColors.textMuted),
+                  ),
+                ],
+              ),
+            ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color:
+                        (isEntry ? AppColors.accentGreen : AppColors.accentAmber)
+                            .withValues(alpha: 0.10),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    isEntry ? 'ENTRY' : 'EXIT',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      color: isEntry
+                          ? AppColors.accentGreen
+                          : AppColors.accentAmber,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  timeFormat.format(log['timestamp'] as DateTime),
+                  style: TextStyle(
+                      fontSize: 10, color: AppColors.textMuted),
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+    }).toList();
+  }
+
+  // ─── Scan View ───────────────────────────────────────
+
   Widget _buildScanView() {
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
@@ -93,262 +524,69 @@ class _SecurityHomeScreenState extends State<SecurityHomeScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Gate Security',
-                      style: Theme.of(context).textTheme.headlineLarge,
-                    ),
-                    Text(
-                      'Scan & validate gate passes',
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                  ],
-                ),
-              ),
-              GestureDetector(
-                onTap: () {
-                  widget.service.logout();
-                  Navigator.of(context).pushReplacementNamed('/');
-                },
-                child: Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    gradient: AppColors.primaryGradient,
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: const Icon(Icons.security_rounded,
-                      color: Colors.white, size: 22),
-                ),
-              ),
-            ],
-          ).animate().fadeIn(duration: 400.ms),
-
-          // Bus Mode active banner
-          if (widget.service.busMode) ...[
-            const SizedBox(height: 12),
-            GlassCard(
-              borderColor: AppColors.accentGreen.withValues(alpha: 0.4),
-              backgroundColor: AppColors.accentGreen.withValues(alpha: 0.05),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              child: Row(
-                children: [
-                  const Icon(Icons.directions_bus_rounded,
-                      color: AppColors.accentGreen, size: 20),
-                  const SizedBox(width: 10),
-                  const Expanded(
-                    child: Text(
-                      'Bus Mode Active — Bus lane enabled',
-                      style: TextStyle(
-                        color: AppColors.accentGreen,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 13,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ).animate().fadeIn(duration: 300.ms),
-          ],
-
+          Text(
+            'Scan QR Pass',
+            style: Theme.of(context).textTheme.headlineLarge,
+          ),
+          Text(
+            'Choose a gate and scan a student\'s pass',
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
           const SizedBox(height: 20),
 
-          // Gate Type Selection
-          Text('Select Gate', style: Theme.of(context).textTheme.titleMedium),
+          // Step 1: Select Gate
+          _stepLabel('1', 'Which gate are you at?'),
           const SizedBox(height: 10),
           Row(
             children: [
-              Expanded(
-                child: GlassCard(
-                  onTap: () =>
-                      setState(() => _selectedGate = GateType.hostel),
-                  padding: const EdgeInsets.all(16),
-                  borderColor: _selectedGate == GateType.hostel
-                      ? AppColors.accentCyan
-                      : null,
-                  backgroundColor: _selectedGate == GateType.hostel
-                      ? AppColors.accentCyan.withValues(alpha: 0.1)
-                      : null,
-                  child: Column(
-                    children: [
-                      Icon(Icons.apartment_rounded,
-                          color: _selectedGate == GateType.hostel
-                              ? AppColors.accentCyan
-                              : AppColors.textMuted,
-                          size: 32),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Hostel Gate',
-                        style: TextStyle(
-                          color: _selectedGate == GateType.hostel
-                              ? AppColors.accentCyan
-                              : AppColors.textSecondary,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 13,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
+              Expanded(child: _gateOption(GateType.hostel, 'Hostel Gate',
+                  Icons.apartment_rounded, AppColors.accentCyan)),
               const SizedBox(width: 12),
-              Expanded(
-                child: GlassCard(
-                  onTap: () =>
-                      setState(() => _selectedGate = GateType.main),
-                  padding: const EdgeInsets.all(16),
-                  borderColor: _selectedGate == GateType.main
-                      ? AppColors.accentAmber
-                      : null,
-                  backgroundColor: _selectedGate == GateType.main
-                      ? AppColors.accentAmber.withValues(alpha: 0.1)
-                      : null,
-                  child: Column(
-                    children: [
-                      Icon(Icons.door_front_door_rounded,
-                          color: _selectedGate == GateType.main
-                              ? AppColors.accentAmber
-                              : AppColors.textMuted,
-                          size: 32),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Main Gate',
-                        style: TextStyle(
-                          color: _selectedGate == GateType.main
-                              ? AppColors.accentAmber
-                              : AppColors.textSecondary,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 13,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
+              Expanded(child: _gateOption(GateType.main, 'Main Gate',
+                  Icons.door_front_door_rounded, AppColors.accentAmber)),
             ],
-          ).animate().fadeIn(delay: 200.ms, duration: 400.ms),
+          ).animate().fadeIn(delay: 100.ms, duration: 400.ms),
 
-          // Lane Type Selection (only for hostel gate)
+          // Step 2: Select Lane (hostel gate only)
           if (_selectedGate == GateType.hostel) ...[
-            const SizedBox(height: 16),
-            Text('Select Lane', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 20),
+            _stepLabel('2', 'Which lane?'),
             const SizedBox(height: 10),
             Wrap(
               spacing: 8,
               runSpacing: 8,
               children: LaneType.values.where((lane) {
-                // Only show bus mode lane if bus mode is active
                 if (lane == LaneType.busMode && !widget.service.busMode) {
                   return false;
                 }
                 return true;
-              }).map((lane) => GestureDetector(
-                    onTap: () => setState(() => _selectedLane = lane),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 10),
-                      decoration: BoxDecoration(
-                        color: _selectedLane == lane
-                            ? lane.color.withValues(alpha: 0.15)
-                            : AppColors.glassWhite,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: _selectedLane == lane
-                              ? lane.color
-                              : AppColors.glassBorder,
-                          width: _selectedLane == lane ? 1.5 : 0.5,
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(lane.icon,
-                              color: _selectedLane == lane
-                                  ? lane.color
-                                  : AppColors.textMuted,
-                              size: 18),
-                          const SizedBox(width: 6),
-                          Text(
-                            lane.label,
-                            style: TextStyle(
-                              color: _selectedLane == lane
-                                  ? lane.color
-                                  : AppColors.textSecondary,
-                              fontWeight: FontWeight.w600,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  )).toList(),
-            ).animate().fadeIn(delay: 250.ms, duration: 400.ms),
+              }).map((lane) => _laneChip(lane)).toList(),
+            ).animate().fadeIn(delay: 150.ms, duration: 400.ms),
           ],
 
           const SizedBox(height: 20),
 
-          // Exception Lane — manual override form
+          // Step 3: Scanner
+          _stepLabel(
+            _selectedGate == GateType.hostel ? '3' : '2',
+            _selectedGate == GateType.hostel &&
+                    _selectedLane == LaneType.exception
+                ? 'Enter student details for override'
+                : 'Scan the QR code',
+          ),
+          const SizedBox(height: 10),
+
+          // Exception Lane or Standard Scanner
           if (_selectedGate == GateType.hostel &&
-              _selectedLane == LaneType.exception) ...[
-            _buildExceptionLane(),
-          ] else ...[
-            // Standard Simulated Scanner
+              _selectedLane == LaneType.exception)
+            _buildExceptionLane()
+          else
             _buildStandardScanner(),
-          ],
 
           // Scan Result
           if (_scanResult.isNotEmpty) ...[
             const SizedBox(height: 12),
-            GlassCard(
-              borderColor: _scanResult.startsWith('✓')
-                  ? AppColors.accentGreen.withValues(alpha: 0.4)
-                  : _scanResult.startsWith('⚠')
-                      ? AppColors.accentAmber.withValues(alpha: 0.4)
-                      : AppColors.accentRed.withValues(alpha: 0.4),
-              backgroundColor: _scanResult.startsWith('✓')
-                  ? AppColors.accentGreen.withValues(alpha: 0.05)
-                  : _scanResult.startsWith('⚠')
-                      ? AppColors.accentAmber.withValues(alpha: 0.05)
-                      : AppColors.accentRed.withValues(alpha: 0.05),
-              child: Row(
-                children: [
-                  Icon(
-                    _scanResult.startsWith('✓')
-                        ? Icons.check_circle_rounded
-                        : _scanResult.startsWith('⚠')
-                            ? Icons.warning_rounded
-                            : Icons.error_rounded,
-                    color: _scanResult.startsWith('✓')
-                        ? AppColors.accentGreen
-                        : _scanResult.startsWith('⚠')
-                            ? AppColors.accentAmber
-                            : AppColors.accentRed,
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      _scanResult,
-                      style: TextStyle(
-                        color: _scanResult.startsWith('✓')
-                            ? AppColors.accentGreen
-                            : _scanResult.startsWith('⚠')
-                                ? AppColors.accentAmber
-                                : AppColors.accentRed,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ).animate().fadeIn(duration: 300.ms).shake(
-                  hz: 2,
-                  delay: 100.ms,
-                ),
+            _buildScanResultCard(),
           ],
           const SizedBox(height: 100),
         ],
@@ -356,14 +594,112 @@ class _SecurityHomeScreenState extends State<SecurityHomeScreen> {
     );
   }
 
+  Widget _stepLabel(String number, String text) {
+    return Row(
+      children: [
+        Container(
+          width: 26,
+          height: 26,
+          decoration: BoxDecoration(
+            color: AppColors.primaryStart,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Center(
+            child: Text(
+              number,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Text(
+          text,
+          style: TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w600,
+            color: AppColors.textPrimary,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _gateOption(
+      GateType gate, String label, IconData icon, Color color) {
+    final isSelected = _selectedGate == gate;
+    return GlassCard(
+      onTap: () => setState(() => _selectedGate = gate),
+      padding: const EdgeInsets.all(16),
+      borderColor: isSelected ? color : null,
+      backgroundColor: isSelected ? color.withValues(alpha: 0.08) : null,
+      child: Column(
+        children: [
+          Icon(icon,
+              color: isSelected ? color : AppColors.textMuted, size: 36),
+          const SizedBox(height: 8),
+          Text(
+            label,
+            style: TextStyle(
+              color: isSelected ? color : AppColors.textSecondary,
+              fontWeight: FontWeight.w600,
+              fontSize: 13,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _laneChip(LaneType lane) {
+    final isSelected = _selectedLane == lane;
+    return GestureDetector(
+      onTap: () => setState(() => _selectedLane = lane),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? lane.color.withValues(alpha: 0.15)
+              : AppColors.glassWhite,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isSelected ? lane.color : AppColors.glassBorder,
+            width: isSelected ? 1.5 : 0.5,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(lane.icon,
+                color: isSelected ? lane.color : AppColors.textMuted,
+                size: 18),
+            const SizedBox(width: 6),
+            Text(
+              lane.label,
+              style: TextStyle(
+                color:
+                    isSelected ? lane.color : AppColors.textSecondary,
+                fontWeight: FontWeight.w600,
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildStandardScanner() {
     return GlassCard(
-      borderColor: AppColors.primaryStart.withValues(alpha: 0.3),
+      borderColor: AppColors.primaryStart.withValues(alpha: 0.2),
       child: Column(
         children: [
           Container(
             width: double.infinity,
-            height: 200,
+            height: 180,
             decoration: BoxDecoration(
               color: AppColors.bgDark,
               borderRadius: BorderRadius.circular(16),
@@ -384,19 +720,17 @@ class _SecurityHomeScreenState extends State<SecurityHomeScreen> {
                   color: _isScanning
                       ? AppColors.accentGreen
                       : AppColors.textMuted,
-                  size: 64,
+                  size: 56,
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 10),
                 Text(
-                  _isScanning
-                      ? 'Scanning...'
-                      : 'Ready to Scan',
+                  _isScanning ? 'Scanning...' : 'Camera preview area',
                   style: TextStyle(
                     color: _isScanning
                         ? AppColors.accentGreen
                         : AppColors.textMuted,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
                 if (_selectedGate == GateType.hostel) ...[
@@ -414,17 +748,35 @@ class _SecurityHomeScreenState extends State<SecurityHomeScreen> {
           ),
           const SizedBox(height: 16),
 
-          // Demo scan buttons
-          Text(
-            'Demo: Simulate QR Scan',
-            style: Theme.of(context).textTheme.bodySmall,
+          // Demo buttons — clearly labeled
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: AppColors.bgSurface,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.info_outline_rounded,
+                    color: AppColors.textMuted, size: 14),
+                const SizedBox(width: 6),
+                Text(
+                  'Demo mode: tap a button to simulate a scan',
+                  style: TextStyle(
+                    color: AppColors.textMuted,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
           Row(
             children: [
               Expanded(
                 child: GlassButton(
-                  label: 'Scan Exit',
+                  label: 'Student Leaving',
                   icon: Icons.logout_rounded,
                   isSmall: true,
                   gradient: const LinearGradient(
@@ -436,7 +788,7 @@ class _SecurityHomeScreenState extends State<SecurityHomeScreen> {
               const SizedBox(width: 8),
               Expanded(
                 child: GlassButton(
-                  label: 'Scan Entry',
+                  label: 'Student Entering',
                   icon: Icons.login_rounded,
                   isSmall: true,
                   gradient: const LinearGradient(
@@ -449,7 +801,7 @@ class _SecurityHomeScreenState extends State<SecurityHomeScreen> {
           ),
         ],
       ),
-    ).animate().fadeIn(delay: 300.ms, duration: 400.ms);
+    ).animate().fadeIn(delay: 200.ms, duration: 400.ms);
   }
 
   Widget _buildExceptionLane() {
@@ -463,12 +815,17 @@ class _SecurityHomeScreenState extends State<SecurityHomeScreen> {
               const Icon(Icons.warning_amber_rounded,
                   color: AppColors.accentRed, size: 20),
               const SizedBox(width: 8),
-              Text('Exception Lane — Manual Override',
+              Text('Manual Override',
                   style: Theme.of(context)
                       .textTheme
                       .titleMedium
                       ?.copyWith(color: AppColors.accentRed)),
             ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Use this only when the student cannot scan their QR code',
+            style: TextStyle(fontSize: 12, color: AppColors.textMuted),
           ),
           const SizedBox(height: 16),
           TextField(
@@ -477,6 +834,7 @@ class _SecurityHomeScreenState extends State<SecurityHomeScreen> {
             decoration: InputDecoration(
               labelText: 'Student Roll Number',
               hintText: 'e.g., CS21B1045',
+              prefixIcon: const Icon(Icons.badge_rounded),
               filled: true,
               fillColor: AppColors.glassWhite,
               border: OutlineInputBorder(
@@ -491,8 +849,12 @@ class _SecurityHomeScreenState extends State<SecurityHomeScreen> {
             maxLines: 2,
             style: const TextStyle(color: AppColors.textPrimary),
             decoration: InputDecoration(
-              labelText: 'Override Reason',
-              hintText: 'Why manual override is needed...',
+              labelText: 'Reason for Override',
+              hintText: 'Why is a manual override needed?',
+              prefixIcon: const Padding(
+                padding: EdgeInsets.only(bottom: 24),
+                child: Icon(Icons.edit_note_rounded),
+              ),
               filled: true,
               fillColor: AppColors.glassWhite,
               border: OutlineInputBorder(
@@ -531,14 +893,52 @@ class _SecurityHomeScreenState extends State<SecurityHomeScreen> {
           ),
         ],
       ),
-    ).animate().fadeIn(delay: 300.ms, duration: 400.ms);
+    ).animate().fadeIn(delay: 200.ms, duration: 400.ms);
+  }
+
+  Widget _buildScanResultCard() {
+    final isSuccess = _scanResult.startsWith('✓');
+    final isWarning = _scanResult.startsWith('⚠');
+    final color = isSuccess
+        ? AppColors.accentGreen
+        : isWarning
+            ? AppColors.accentAmber
+            : AppColors.accentRed;
+    final icon = isSuccess
+        ? Icons.check_circle_rounded
+        : isWarning
+            ? Icons.warning_rounded
+            : Icons.error_rounded;
+
+    return GlassCard(
+      borderColor: color.withValues(alpha: 0.4),
+      backgroundColor: color.withValues(alpha: 0.05),
+      child: Row(
+        children: [
+          Icon(icon, color: color, size: 24),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              _scanResult,
+              style: TextStyle(
+                color: color,
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
+              ),
+            ),
+          ),
+        ],
+      ),
+    )
+        .animate()
+        .fadeIn(duration: 300.ms)
+        .shake(hz: 2, delay: 100.ms);
   }
 
   Future<void> _simulateScan(String action) async {
     setState(() => _isScanning = true);
     await Future.delayed(const Duration(milliseconds: 800));
 
-    // Try to scan the active pass
     final passes = widget.service.qrPasses.where((p) => p.isActive).toList();
     if (passes.isEmpty) {
       setState(() {
@@ -560,11 +960,13 @@ class _SecurityHomeScreenState extends State<SecurityHomeScreen> {
       if (error != null) {
         _scanResult = '✗ $error';
       } else {
+        final gateName =
+            _selectedGate == GateType.hostel ? 'Hostel Gate' : 'Main Gate';
         final laneInfo = _selectedGate == GateType.hostel
-            ? ' [${_selectedLane.label}]'
+            ? ' (${_selectedLane.label})'
             : '';
         _scanResult =
-            '✓ ${action.toUpperCase()} recorded at ${_selectedGate == GateType.hostel ? "Hostel" : "Main"} Gate$laneInfo';
+            '✓ ${action == 'exit' ? 'EXIT' : 'ENTRY'} recorded at $gateName$laneInfo';
       }
     });
   }
@@ -574,11 +976,12 @@ class _SecurityHomeScreenState extends State<SecurityHomeScreen> {
     final reason = _exceptionReasonController.text.trim();
 
     if (rollNumber.isEmpty) {
-      setState(() => _scanResult = '⚠ Please enter student roll number');
+      setState(
+          () => _scanResult = '⚠ Please enter the student\'s roll number');
       return;
     }
     if (reason.isEmpty) {
-      setState(() => _scanResult = '⚠ Please provide override reason');
+      setState(() => _scanResult = '⚠ Please provide a reason for override');
       return;
     }
 
@@ -587,15 +990,16 @@ class _SecurityHomeScreenState extends State<SecurityHomeScreen> {
 
     setState(() {
       _isScanning = false;
-      _scanResult = '✓ EXCEPTION: ${action.toUpperCase()} override for $rollNumber recorded';
+      _scanResult =
+          '✓ OVERRIDE: ${action == 'exit' ? 'EXIT' : 'ENTRY'} recorded for $rollNumber';
       _exceptionController.clear();
       _exceptionReasonController.clear();
     });
   }
 
-  Widget _buildActivePasses() {
-    final activePasses =
-        widget.service.qrPasses.where((p) => p.isActive).toList();
+  // ─── Active Passes ──────────────────────────────────
+
+  Widget _buildActivePasses(List<QrPass> activePasses) {
     final allPasses = widget.service.qrPasses;
 
     return SingleChildScrollView(
@@ -611,7 +1015,7 @@ class _SecurityHomeScreenState extends State<SecurityHomeScreen> {
           ),
           const SizedBox(height: 4),
           Text(
-            '${activePasses.length} active • ${allPasses.length} total',
+            '${activePasses.length} students with active passes • ${allPasses.length} total issued',
             style: Theme.of(context).textTheme.bodyMedium,
           ),
           const SizedBox(height: 16),
@@ -624,9 +1028,15 @@ class _SecurityHomeScreenState extends State<SecurityHomeScreen> {
                     Icon(Icons.badge_rounded,
                         size: 64, color: AppColors.textMuted),
                     const SizedBox(height: 16),
-                    Text('No active passes',
+                    Text('No active passes right now',
                         style: TextStyle(
-                            color: AppColors.textMuted, fontSize: 16)),
+                            color: AppColors.textSecondary,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w500)),
+                    const SizedBox(height: 4),
+                    Text('Students with approved leave will appear here',
+                        style: TextStyle(
+                            color: AppColors.textMuted, fontSize: 12)),
                   ],
                 ),
               ),
@@ -634,53 +1044,97 @@ class _SecurityHomeScreenState extends State<SecurityHomeScreen> {
           else
             ...activePasses.map((pass) {
               Color stateColor;
+              String stateDescription;
+              IconData stateIcon;
               switch (pass.state) {
                 case QrState.unused:
                   stateColor = AppColors.accentCyan;
+                  stateDescription = 'Not yet used';
+                  stateIcon = Icons.qr_code_rounded;
                   break;
                 case QrState.hostelExited:
                   stateColor = AppColors.accentAmber;
+                  stateDescription = 'Left hostel, heading to main gate';
+                  stateIcon = Icons.directions_walk_rounded;
                   break;
                 case QrState.campusExited:
                   stateColor = AppColors.accentPink;
+                  stateDescription = 'Left campus';
+                  stateIcon = Icons.flight_takeoff_rounded;
                   break;
                 case QrState.campusEntered:
                   stateColor = AppColors.accentGreen;
+                  stateDescription = 'Back on campus, heading to hostel';
+                  stateIcon = Icons.flight_land_rounded;
                   break;
                 default:
                   stateColor = AppColors.textMuted;
+                  stateDescription = pass.state.label;
+                  stateIcon = Icons.check_circle_rounded;
               }
 
               return GlassCard(
-                child: Row(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Container(
-                      width: 48,
-                      height: 48,
-                      decoration: BoxDecoration(
-                        color: stateColor.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: Icon(Icons.qr_code_2_rounded,
-                          color: stateColor, size: 24),
+                    Row(
+                      children: [
+                        Container(
+                          width: 48,
+                          height: 48,
+                          decoration: BoxDecoration(
+                            color: stateColor.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: Icon(stateIcon,
+                              color: stateColor, size: 24),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(pass.studentName,
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .titleMedium),
+                              Text(pass.studentRollNumber,
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodySmall),
+                            ],
+                          ),
+                        ),
+                        StatusBadge(
+                          label: pass.state.label,
+                          color: stateColor,
+                        ),
+                      ],
                     ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: stateColor.withValues(alpha: 0.06),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text(pass.studentName,
-                              style:
-                                  Theme.of(context).textTheme.titleMedium),
-                          Text(pass.studentRollNumber,
-                              style:
-                                  Theme.of(context).textTheme.bodySmall),
+                          Icon(Icons.info_outline_rounded,
+                              color: stateColor, size: 14),
+                          const SizedBox(width: 6),
+                          Text(
+                            stateDescription,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: stateColor,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
                         ],
                       ),
-                    ),
-                    StatusBadge(
-                      label: pass.state.label,
-                      color: stateColor,
                     ),
                   ],
                 ),
@@ -692,43 +1146,145 @@ class _SecurityHomeScreenState extends State<SecurityHomeScreen> {
     );
   }
 
-  Widget _buildProfile() {
-    final user = widget.service.currentUser;
-    if (user == null) return const SizedBox.shrink();
+  // ─── Profile ─────────────────────────────────────────
+
+  Widget _buildProfile(AppUser user) {
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          const SizedBox(height: 40),
+          const SizedBox(height: 24),
+
+          // Avatar
           Container(
-            width: 80,
-            height: 80,
+            width: 88,
+            height: 88,
             decoration: BoxDecoration(
               gradient: AppColors.primaryGradient,
-              borderRadius: BorderRadius.circular(24),
+              borderRadius: BorderRadius.circular(26),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.primaryStart.withValues(alpha: 0.25),
+                  blurRadius: 20,
+                  offset: const Offset(0, 8),
+                ),
+              ],
             ),
-            child: const Icon(Icons.security_rounded,
-                color: Colors.white, size: 36),
-          ),
+            child: const Icon(Icons.shield_rounded,
+                color: Colors.white, size: 40),
+          ).animate().fadeIn(duration: 400.ms).scale(
+                begin: const Offset(0.8, 0.8),
+                duration: 500.ms,
+                curve: Curves.elasticOut,
+              ),
           const SizedBox(height: 16),
-          Text(user.name, style: Theme.of(context).textTheme.headlineMedium),
-          Text(user.email, style: Theme.of(context).textTheme.bodyMedium),
-          const SizedBox(height: 8),
-          StatusBadge(label: 'Security', color: AppColors.accentRed),
-          const SizedBox(height: 32),
-          GlassButton(
-            label: 'Logout',
-            icon: Icons.logout_rounded,
-            gradient: const LinearGradient(
-              colors: [AppColors.accentRed, Color(0xFFDC2626)],
-            ),
-            onPressed: () {
-              widget.service.logout();
-              Navigator.of(context).pushReplacementNamed('/');
-            },
+
+          // Name & email
+          Text(user.name,
+              style: Theme.of(context).textTheme.headlineMedium,
+              textAlign: TextAlign.center),
+          const SizedBox(height: 4),
+          Text(user.email,
+              style: Theme.of(context).textTheme.bodyMedium,
+              textAlign: TextAlign.center),
+          const SizedBox(height: 10),
+          StatusBadge(
+            label: 'Security Personnel',
+            color: AppColors.primaryStart,
           ),
+          const SizedBox(height: 28),
+
+          // Profile info cards
+          _profileInfoCard(
+            Icons.shield_rounded,
+            'Role',
+            'Gate Security',
+            AppColors.primaryStart,
+          ).animate().fadeIn(delay: 100.ms, duration: 400.ms),
+          _profileInfoCard(
+            Icons.email_rounded,
+            'Email',
+            user.email,
+            AppColors.accentCyan,
+          ).animate().fadeIn(delay: 200.ms, duration: 400.ms),
+          if (user.phone != null)
+            _profileInfoCard(
+              Icons.phone_rounded,
+              'Phone',
+              user.phone!,
+              AppColors.accentGreen,
+            ).animate().fadeIn(delay: 300.ms, duration: 400.ms),
+          _profileInfoCard(
+            Icons.access_time_rounded,
+            'Shift Status',
+            'On Duty',
+            AppColors.accentGreen,
+          ).animate().fadeIn(delay: 400.ms, duration: 400.ms),
+          const SizedBox(height: 24),
+
+          // Logout button
+          SizedBox(
+            width: double.infinity,
+            child: GlassButton(
+              label: 'Logout',
+              icon: Icons.logout_rounded,
+              gradient: const LinearGradient(
+                colors: [AppColors.accentRed, Color(0xFFDC2626)],
+              ),
+              onPressed: () {
+                widget.service.logout();
+                Navigator.of(context).pushReplacementNamed('/');
+              },
+            ),
+          ).animate().fadeIn(delay: 500.ms, duration: 400.ms),
           const SizedBox(height: 100),
+        ],
+      ),
+    );
+  }
+
+  Widget _profileInfoCard(
+      IconData icon, String label, String value, Color color) {
+    return GlassCard(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      child: Row(
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.10),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, color: color, size: 20),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    color: AppColors.textMuted,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  value,
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
