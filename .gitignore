@@ -49,10 +49,8 @@
 **/yarn-error.log*
 .npm/
 
-# Firebase & Sensitive Keys
+# Firebase & Sensitive Keys (serviceAccountKey has full admin access — NEVER commit)
 **/serviceAccountKey.json
-**/google-services.json
-firebase_options.dart
 .env
 secret.json
 
