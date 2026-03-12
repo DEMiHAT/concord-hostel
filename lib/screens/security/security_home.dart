@@ -25,11 +25,14 @@ class _SecurityHomeScreenState extends State<SecurityHomeScreen> {
   final TextEditingController _exceptionController = TextEditingController();
   final TextEditingController _exceptionReasonController =
       TextEditingController();
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
 
   @override
   void dispose() {
     _exceptionController.dispose();
     _exceptionReasonController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -1002,6 +1005,15 @@ class _SecurityHomeScreenState extends State<SecurityHomeScreen> {
   Widget _buildActivePasses(List<QrPass> activePasses) {
     final allPasses = widget.service.qrPasses;
 
+    // Filter passes by search query
+    final filteredPasses = _searchQuery.isEmpty
+        ? activePasses
+        : activePasses.where((p) {
+            final query = _searchQuery.toLowerCase();
+            return p.studentName.toLowerCase().contains(query) ||
+                p.studentRollNumber.toLowerCase().contains(query);
+          }).toList();
+
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
       padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -1018,8 +1030,71 @@ class _SecurityHomeScreenState extends State<SecurityHomeScreen> {
             '${activePasses.length} students with active passes • ${allPasses.length} total issued',
             style: Theme.of(context).textTheme.bodyMedium,
           ),
-          const SizedBox(height: 16),
-          if (activePasses.isEmpty)
+          const SizedBox(height: 12),
+
+          // Search bar
+          TextField(
+            controller: _searchController,
+            onChanged: (value) => setState(() => _searchQuery = value),
+            style: const TextStyle(
+                color: AppColors.textPrimary, fontSize: 14),
+            decoration: InputDecoration(
+              hintText: 'Search by name or roll number...',
+              hintStyle: TextStyle(
+                  color: AppColors.textMuted, fontSize: 13),
+              prefixIcon: const Icon(Icons.search_rounded,
+                  color: AppColors.textMuted, size: 20),
+              suffixIcon: _searchQuery.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(Icons.clear_rounded,
+                          color: AppColors.textMuted, size: 18),
+                      onPressed: () {
+                        _searchController.clear();
+                        setState(() => _searchQuery = '');
+                      },
+                    )
+                  : null,
+              filled: true,
+              fillColor: AppColors.glassWhite,
+              contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16, vertical: 12),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide:
+                    const BorderSide(color: AppColors.glassBorder),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide:
+                    const BorderSide(color: AppColors.glassBorder),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: const BorderSide(
+                    color: AppColors.primaryStart, width: 1.5),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          if (filteredPasses.isEmpty && _searchQuery.isNotEmpty)
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.all(30),
+                child: Column(
+                  children: [
+                    Icon(Icons.search_off_rounded,
+                        size: 48, color: AppColors.textMuted),
+                    const SizedBox(height: 12),
+                    Text('No passes match "$_searchQuery"',
+                        style: TextStyle(
+                            color: AppColors.textSecondary,
+                            fontSize: 14)),
+                  ],
+                ),
+              ),
+            )
+          else if (filteredPasses.isEmpty)
             Center(
               child: Padding(
                 padding: const EdgeInsets.all(40),
@@ -1034,7 +1109,8 @@ class _SecurityHomeScreenState extends State<SecurityHomeScreen> {
                             fontSize: 15,
                             fontWeight: FontWeight.w500)),
                     const SizedBox(height: 4),
-                    Text('Students with approved leave will appear here',
+                    Text(
+                        'Students with approved leave will appear here',
                         style: TextStyle(
                             color: AppColors.textMuted, fontSize: 12)),
                   ],
@@ -1042,7 +1118,7 @@ class _SecurityHomeScreenState extends State<SecurityHomeScreen> {
               ),
             )
           else
-            ...activePasses.map((pass) {
+            ...filteredPasses.map((pass) {
               Color stateColor;
               String stateDescription;
               IconData stateIcon;

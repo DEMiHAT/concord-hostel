@@ -132,7 +132,7 @@ class _GlassButtonState extends State<GlassButton>
         },
         child: Container(
           padding: EdgeInsets.symmetric(
-            horizontal: widget.isSmall ? 16 : 24,
+            horizontal: widget.isSmall ? 12 : 24,
             vertical: widget.isSmall ? 10 : 14,
           ),
           decoration: BoxDecoration(
@@ -165,12 +165,15 @@ class _GlassButtonState extends State<GlassButton>
                       Icon(widget.icon, color: Colors.white, size: widget.isSmall ? 16 : 20),
                       SizedBox(width: widget.isSmall ? 6 : 8),
                     ],
-                    Text(
-                      widget.label,
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w600,
-                        fontSize: widget.isSmall ? 13 : 15,
+                    Flexible(
+                      child: Text(
+                        widget.label,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                          fontSize: widget.isSmall ? 13 : 15,
+                        ),
                       ),
                     ),
                   ],
