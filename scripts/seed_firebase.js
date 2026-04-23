@@ -283,7 +283,7 @@ async function seedLeaveRequests(uidMap) {
   const requests = [
     {
       id: 'lr1', studentId: s, studentName: 'Arjun Mehta', studentRollNumber: 'CS21B1045',
-      hostelBlock: 'Block A', roomNumber: 'A-204', leaveType: 'day_pass', status: 'approved',
+      hostelBlock: 'Block A', roomNumber: 'A-204', leaveType: 'dayPass', status: 'approved',
       reason: 'Medical appointment at city hospital',
       fromDate: Timestamp.fromMillis(now - DAY), toDate: Timestamp.fromMillis(now - DAY),
       createdAt: Timestamp.fromMillis(now - 2*DAY), updatedAt: Timestamp.fromMillis(now - DAY),

@@ -19,6 +19,10 @@ service cloud.firestore {
       return request.auth.uid == userId;
     }
 
+    function isStaff() {
+      return getUserRole() in ['rt', 'faculty', 'hod', 'warden', 'admin'];
+    }
+
     // ─── Users ───
     match /users/{userId} {
       allow read: if isAuthenticated();
@@ -29,13 +33,17 @@ service cloud.firestore {
     match /leave_requests/{requestId} {
       allow read: if isAuthenticated();
       allow create: if isAuthenticated() && isRole('student');
-      allow update: if isAuthenticated();
+      // Students can only update their own (document uploads); staff can approve/reject
+      allow update: if isAuthenticated()
+        && (isStaff() || isRole('parent') || isOwner(resource.data.studentId));
     }
 
     // ─── QR Passes ───
     match /qr_passes/{passId} {
       allow read: if isAuthenticated();
-      allow create: if isAuthenticated();
+      // Only created during approval flow (by staff/system)
+      allow create: if isAuthenticated()
+        && (isStaff() || isRole('security'));
       allow update: if isAuthenticated()
         && (isRole('security') || isRole('admin'));
     }
@@ -50,15 +58,19 @@ service cloud.firestore {
     // ─── Medical Visits ───
     match /medical_visits/{visitId} {
       allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && isRole('medicalOfficer');
-      allow update: if isAuthenticated();
+      allow create: if isAuthenticated() && isRole('medical_officer');
+      // Medical officer updates records; staff acknowledge intimations; students request review
+      allow update: if isAuthenticated()
+        && (isRole('medical_officer') || isStaff()
+            || isOwner(resource.data.studentId));
     }
 
     // ─── Grievances ───
     match /grievances/{grievanceId} {
       allow read: if isAuthenticated();
       allow create: if isAuthenticated() && isRole('student');
-      allow update: if isAuthenticated();
+      // Staff can respond/escalate/resolve; students can only view
+      allow update: if isAuthenticated() && isStaff();
     }
 
     // ─── Geofence Sessions ───
@@ -80,7 +92,16 @@ service cloud.firestore {
       allow read: if isAuthenticated();
       allow create: if isAuthenticated()
         && (isRole('rt') || isRole('warden') || isRole('admin'));
-      allow update: if isAuthenticated();
+      // Staff and parents can update (resolve, respond)
+      allow update: if isAuthenticated()
+        && (isStaff() || isRole('parent'));
+    }
+
+    // ─── Audit Logs ───
+    match /audit_logs/{logId} {
+      allow read: if isAuthenticated()
+        && (isRole('admin') || isRole('warden'));
+      allow create: if isAuthenticated();
     }
   }
 }

@@ -8,6 +8,7 @@ import '../models/medical.dart';
 import '../models/grievance.dart';
 import '../models/geofence_attendance.dart';
 import 'app_service.dart';
+import 'qr_generation_service.dart';
 
 /// Mock authentication and data service for demo purposes.
 /// Replace with actual Firebase calls when Firebase is configured.
@@ -714,6 +715,74 @@ class MockService extends AppService {
     );
     notifyListeners();
     return null;
+  }
+
+  // ─── Real QR scan processing ─────────────────────────
+  @override
+  Future<String?> processQrScan(
+    String rawQrData,
+    GateType gate,
+    String action, {
+    LaneType? laneType,
+  }) async {
+    final result = QrGenerationService.parseQrData(rawQrData);
+    if (!result.isValid) {
+      return result.error ?? 'Invalid QR code';
+    }
+    // Delegate to the existing state-machine method
+    return scanQr(result.passId!, gate, action, laneType: laneType);
+  }
+
+  // ─── Manual verification code entry ─────────────────
+  @override
+  Future<(String? error, QrPass? pass)> scanQrByVerificationCode(
+    String verificationCode,
+    GateType gate,
+    String action, {
+    LaneType? laneType,
+  }) async {
+    final code = verificationCode.trim().toUpperCase();
+    if (code.isEmpty) {
+      return ('Please enter a verification code', null);
+    }
+
+    // Search all active passes for the matching verification code
+    QrPass? matched;
+    for (final pass in _qrPasses) {
+      if (!pass.isActive) continue;
+      final passCode = QrGenerationService.generateVerificationCode(
+        pass.id,
+        pass.studentId,
+      );
+      if (passCode == code) {
+        matched = pass;
+        break;
+      }
+    }
+
+    if (matched == null) {
+      return ('No active pass found for code "$code"', null);
+    }
+
+    final error = await scanQr(matched.id, gate, action, laneType: laneType);
+    if (error != null) {
+      return (error, matched);
+    }
+
+    // Return the updated pass
+    final updated = getQrPass(matched.id);
+    return (null, updated);
+  }
+
+  // ─── Overlap detection ──────────────────────────────
+  @override
+  List<QrPass> getOverlappingPasses(String studentId, DateTime from, DateTime to) {
+    return _qrPasses.where((p) {
+      if (p.studentId != studentId) return false;
+      if (!p.isActive) return false;
+      // Check overlap: pass.validFrom < to AND pass.validUntil > from
+      return p.validFrom.isBefore(to) && p.validUntil.isAfter(from);
+    }).toList();
   }
 
   // Stats

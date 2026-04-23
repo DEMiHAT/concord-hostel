@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:intl/intl.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 import '../../core/theme/app_theme.dart';
 import '../../models/enums.dart';
 import '../../models/qr_pass.dart';
@@ -23,6 +24,11 @@ class _SecurityHomeScreenState extends State<SecurityHomeScreen> {
   LaneType _selectedLane = LaneType.scanLane;
   String _scanResult = '';
   bool _isScanning = false;
+  int _scanTab = 0; // 0 = Camera Scan, 1 = Verification Code
+  bool _cameraActive = false;
+  MobileScannerController? _scannerController;
+  final TextEditingController _verificationCodeController =
+      TextEditingController();
   final TextEditingController _exceptionController = TextEditingController();
   final TextEditingController _exceptionReasonController =
       TextEditingController();
@@ -31,6 +37,8 @@ class _SecurityHomeScreenState extends State<SecurityHomeScreen> {
 
   @override
   void dispose() {
+    _scannerController?.dispose();
+    _verificationCodeController.dispose();
     _exceptionController.dispose();
     _exceptionReasonController.dispose();
     _searchController.dispose();
@@ -701,111 +709,290 @@ class _SecurityHomeScreenState extends State<SecurityHomeScreen> {
       borderColor: AppColors.primaryStart.withValues(alpha: 0.2),
       child: Column(
         children: [
+          // ── Tab selector: Scan QR | Verification Code ──
           Container(
-            width: double.infinity,
-            height: 180,
             decoration: BoxDecoration(
-              color: AppColors.bgDark,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: _isScanning
-                    ? AppColors.accentGreen
-                    : AppColors.glassBorder,
-                width: _isScanning ? 2 : 0.5,
-              ),
+              color: AppColors.bgSurface,
+              borderRadius: BorderRadius.circular(12),
             ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
+            padding: const EdgeInsets.all(4),
+            child: Row(
               children: [
-                Icon(
-                  _isScanning
-                      ? Icons.qr_code_scanner_rounded
-                      : Icons.qr_code_2_rounded,
-                  color: _isScanning
-                      ? AppColors.accentGreen
-                      : AppColors.textMuted,
-                  size: 56,
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  _isScanning ? 'Scanning...' : 'Camera preview area',
-                  style: TextStyle(
-                    color: _isScanning
-                        ? AppColors.accentGreen
-                        : AppColors.textMuted,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                if (_selectedGate == GateType.hostel) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    'Lane: ${_selectedLane.label}',
-                    style: TextStyle(
-                      color: _selectedLane.color.withValues(alpha: 0.7),
-                      fontSize: 11,
-                    ),
-                  ),
-                ],
+                _scanTabButton(0, Icons.qr_code_scanner_rounded, 'Scan QR'),
+                const SizedBox(width: 4),
+                _scanTabButton(1, Icons.pin_rounded, 'Verification Code'),
               ],
             ),
           ),
           const SizedBox(height: 16),
 
-          // Demo buttons — clearly labeled
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: AppColors.bgSurface,
-              borderRadius: BorderRadius.circular(10),
+          // ── Tab content ──
+          if (_scanTab == 0) _buildCameraScanner() else _buildVerificationCodeInput(),
+
+          // Action buttons only for verification code tab
+          if (_scanTab == 1) ...[
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(
+                  child: GlassButton(
+                    label: 'Student Leaving',
+                    icon: Icons.logout_rounded,
+                    isSmall: true,
+                    isLoading: _isScanning,
+                    gradient: const LinearGradient(
+                      colors: [AppColors.accentAmber, Color(0xFFD97706)],
+                    ),
+                    onPressed: _isScanning ? null : () => _processVerificationCode('exit'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: GlassButton(
+                    label: 'Student Entering',
+                    icon: Icons.login_rounded,
+                    isSmall: true,
+                    isLoading: _isScanning,
+                    gradient: const LinearGradient(
+                      colors: [AppColors.accentGreen, Color(0xFF059669)],
+                    ),
+                    onPressed: _isScanning ? null : () => _processVerificationCode('entry'),
+                  ),
+                ),
+              ],
             ),
+          ],
+        ],
+      ),
+    ).animate().fadeIn(delay: 200.ms, duration: 400.ms);
+  }
+
+  Widget _scanTabButton(int index, IconData icon, String label) {
+    final isActive = _scanTab == index;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () {
+          setState(() {
+            _scanTab = index;
+            _scanResult = '';
+          });
+          if (index == 0) {
+            _startCamera();
+          } else {
+            _stopCamera();
+          }
+        },
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          decoration: BoxDecoration(
+            color: isActive ? AppColors.bgCard : Colors.transparent,
+            borderRadius: BorderRadius.circular(10),
+            boxShadow: isActive
+                ? [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 4, offset: const Offset(0, 2))]
+                : null,
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon,
+                  size: 16,
+                  color: isActive ? AppColors.primaryStart : AppColors.textMuted),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+                  color: isActive ? AppColors.primaryStart : AppColors.textMuted,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _startCamera() {
+    _scannerController?.dispose();
+    _scannerController = MobileScannerController(
+      detectionSpeed: DetectionSpeed.normal,
+      facing: CameraFacing.back,
+    );
+    setState(() => _cameraActive = true);
+  }
+
+  void _stopCamera() {
+    _scannerController?.dispose();
+    _scannerController = null;
+    setState(() => _cameraActive = false);
+  }
+
+  Widget _buildCameraScanner() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Camera preview
+        Container(
+          width: double.infinity,
+          height: 220,
+          decoration: BoxDecoration(
+            color: AppColors.bgDark,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: _cameraActive ? AppColors.accentGreen : AppColors.glassBorder,
+              width: _cameraActive ? 2 : 0.5,
+            ),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: _cameraActive && _scannerController != null
+              ? Stack(
+                  children: [
+                    MobileScanner(
+                      controller: _scannerController!,
+                      onDetect: _onQrDetected,
+                    ),
+                    // Scan overlay
+                    Center(
+                      child: Container(
+                        width: 180,
+                        height: 180,
+                        decoration: BoxDecoration(
+                          border: Border.all(
+                            color: AppColors.accentGreen.withValues(alpha: 0.6),
+                            width: 2,
+                          ),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
+                    ),
+                    // Top label
+                    Positioned(
+                      top: 8,
+                      left: 0,
+                      right: 0,
+                      child: Center(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.black54,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Text(
+                            'Point at student\'s QR code',
+                            style: TextStyle(color: Colors.white, fontSize: 11),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                )
+              : Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.videocam_off_rounded, color: AppColors.textMuted, size: 48),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Camera inactive',
+                      style: TextStyle(color: AppColors.textMuted, fontSize: 13),
+                    ),
+                    const SizedBox(height: 12),
+                    GlassButton(
+                      label: 'Start Camera',
+                      icon: Icons.videocam_rounded,
+                      isSmall: true,
+                      gradient: const LinearGradient(
+                        colors: [AppColors.primaryStart, AppColors.primaryEnd],
+                      ),
+                      onPressed: _startCamera,
+                    ),
+                  ],
+                ),
+        ),
+        const SizedBox(height: 8),
+        // Lane info
+        if (_selectedGate == GateType.hostel)
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
             child: Row(
               children: [
-                Icon(Icons.info_outline_rounded,
-                    color: AppColors.textMuted, size: 14),
+                Icon(_selectedLane.icon, size: 14, color: _selectedLane.color),
                 const SizedBox(width: 6),
                 Text(
-                  'Demo mode: tap a button to simulate a scan',
+                  'Lane: ${_selectedLane.label}',
                   style: TextStyle(
-                    color: AppColors.textMuted,
+                    color: _selectedLane.color.withValues(alpha: 0.7),
                     fontSize: 11,
-                    fontWeight: FontWeight.w500,
                   ),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: GlassButton(
-                  label: 'Student Leaving',
-                  icon: Icons.logout_rounded,
-                  isSmall: true,
-                  gradient: const LinearGradient(
-                    colors: [AppColors.accentAmber, Color(0xFFD97706)],
-                  ),
-                  onPressed: () => _simulateScan('exit'),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: GlassButton(
-                  label: 'Student Entering',
-                  icon: Icons.login_rounded,
-                  isSmall: true,
-                  gradient: const LinearGradient(
-                    colors: [AppColors.accentGreen, Color(0xFF059669)],
-                  ),
-                  onPressed: () => _simulateScan('entry'),
-                ),
-              ),
-            ],
+      ],
+    );
+  }
+
+  Widget _buildVerificationCodeInput() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Enter the 6-character verification code shown on the student\'s QR pass screen',
+          style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+        ),
+        const SizedBox(height: 10),
+        TextField(
+          controller: _verificationCodeController,
+          textCapitalization: TextCapitalization.characters,
+          style: const TextStyle(
+            color: AppColors.textPrimary,
+            fontSize: 24,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 6,
+            fontFamily: 'monospace',
           ),
-        ],
-      ),
-    ).animate().fadeIn(delay: 200.ms, duration: 400.ms);
+          textAlign: TextAlign.center,
+          maxLength: 6,
+          decoration: InputDecoration(
+            hintText: 'A3F72B',
+            hintStyle: TextStyle(
+              color: AppColors.textMuted.withValues(alpha: 0.4),
+              fontSize: 24,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 6,
+            ),
+            counterText: '',
+            prefixIcon: const Icon(Icons.verified_rounded, size: 20),
+            filled: true,
+            fillColor: AppColors.bgSurface,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: const BorderSide(color: AppColors.glassBorder),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: const BorderSide(color: AppColors.glassBorder),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(14),
+              borderSide: const BorderSide(color: AppColors.primaryStart, width: 1.5),
+            ),
+          ),
+        ),
+        if (_selectedGate == GateType.hostel)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text(
+              'Lane: ${_selectedLane.label}',
+              style: TextStyle(
+                color: _selectedLane.color.withValues(alpha: 0.7),
+                fontSize: 11,
+              ),
+            ),
+          ),
+      ],
+    );
   }
 
   Widget _buildExceptionLane() {
@@ -939,47 +1126,152 @@ class _SecurityHomeScreenState extends State<SecurityHomeScreen> {
         .shake(hz: 2, delay: 100.ms);
   }
 
-  Future<void> _simulateScan(String action) async {
+  /// Called automatically when the camera detects a QR code
+  void _onQrDetected(BarcodeCapture capture) {
+    if (_isScanning) return; // Prevent re-entry
+    final barcodes = capture.barcodes;
+    if (barcodes.isEmpty) return;
+
+    final rawData = barcodes.first.rawValue;
+    if (rawData == null || rawData.isEmpty) return;
+
+    // Pause camera to prevent repeat scans
+    _scannerController?.stop();
     setState(() => _isScanning = true);
-    await Future.delayed(const Duration(milliseconds: 800));
 
-    final passes = widget.service.qrPasses.where((p) => p.isActive).toList();
-    if (passes.isEmpty) {
+    // Parse the QR data to validate it
+    final parsed = QrGenerationService.parseQrData(rawData);
+    if (!parsed.isValid) {
       setState(() {
         _isScanning = false;
-        _scanResult = '✗ No active passes found';
+        _scanResult = '✗ ${parsed.error ?? "Invalid QR code"}';
+      });
+      // Resume camera after a delay
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted && _scanTab == 0) {
+          _scannerController?.start();
+        }
       });
       return;
     }
 
-    final pass = passes.first;
+    // Get pass info for display
+    final pass = parsed.passId != null
+        ? widget.service.getQrPass(parsed.passId!)
+        : null;
+    final studentInfo = pass != null
+        ? '${pass.studentName} (${pass.studentRollNumber})'
+        : 'Student';
+    final stateInfo = pass != null ? pass.state.label : '';
 
-    // Simulate V2 QR generation and parsing (as if scanned from student's phone)
-    final simulatedQrData = QrGenerationService.generateQrData(
-      passId: pass.id,
-      studentId: pass.studentId,
-      stateValue: pass.state.firestoreValue,
-    );
-    final scanResult = QrGenerationService.parseQrData(simulatedQrData);
+    // Show action dialog
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.bgCard,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: AppColors.glassBorder,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Icon(Icons.qr_code_scanner_rounded,
+                color: AppColors.accentGreen, size: 40),
+            const SizedBox(height: 12),
+            Text('QR Code Detected',
+                style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary)),
+            const SizedBox(height: 8),
+            Text(studentInfo,
+                style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textSecondary)),
+            if (stateInfo.isNotEmpty)
+              Text('Current state: $stateInfo',
+                  style: TextStyle(
+                      fontSize: 12, color: AppColors.textMuted)),
+            const SizedBox(height: 20),
+            Text('What action?',
+                style: TextStyle(
+                    fontSize: 13, color: AppColors.textSecondary)),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: GlassButton(
+                    label: 'Student Leaving',
+                    icon: Icons.logout_rounded,
+                    gradient: const LinearGradient(
+                      colors: [AppColors.accentAmber, Color(0xFFD97706)],
+                    ),
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      _processCameraScan(rawData, 'exit');
+                    },
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: GlassButton(
+                    label: 'Student Entering',
+                    icon: Icons.login_rounded,
+                    gradient: const LinearGradient(
+                      colors: [AppColors.accentGreen, Color(0xFF059669)],
+                    ),
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      _processCameraScan(rawData, 'entry');
+                    },
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                setState(() => _isScanning = false);
+                _scannerController?.start();
+              },
+              child: Text('Cancel',
+                  style: TextStyle(color: AppColors.textMuted)),
+            ),
+          ],
+        ),
+      ),
+    ).then((_) {
+      // If dialog dismissed without action, resume camera
+      if (_isScanning && mounted) {
+        setState(() => _isScanning = false);
+        _scannerController?.start();
+      }
+    });
+  }
 
-    if (!scanResult.isValid) {
-      setState(() {
-        _isScanning = false;
-        _scanResult = '✗ ${scanResult.error ?? "Invalid QR code"}';
-      });
-      return;
-    }
+  /// Process the scanned QR data with the chosen action
+  Future<void> _processCameraScan(String rawData, String action) async {
+    final laneType = _selectedGate == GateType.hostel ? _selectedLane : null;
+    final gateName = _selectedGate == GateType.hostel ? 'Hostel Gate' : 'Main Gate';
+    final laneInfo = _selectedGate == GateType.hostel ? ' (${_selectedLane.label})' : '';
 
-    final verificationCode = QrGenerationService.generateVerificationCode(
-      pass.id,
-      pass.studentId,
-    );
-
-    final error = await widget.service.scanQr(
-      scanResult.passId!,
+    final error = await widget.service.processQrScan(
+      rawData,
       _selectedGate,
       action,
-      laneType: _selectedGate == GateType.hostel ? _selectedLane : null,
+      laneType: laneType,
     );
 
     setState(() {
@@ -987,18 +1279,69 @@ class _SecurityHomeScreenState extends State<SecurityHomeScreen> {
       if (error != null) {
         _scanResult = '✗ $error';
       } else {
-        final gateName =
-            _selectedGate == GateType.hostel ? 'Hostel Gate' : 'Main Gate';
-        final laneInfo = _selectedGate == GateType.hostel
-            ? ' (${_selectedLane.label})'
-            : '';
-        final format = scanResult.isLegacy ? ' [V1]' : ' [V2 ✓]';
+        final parsed = QrGenerationService.parseQrData(rawData);
+        final pass = parsed.passId != null
+            ? widget.service.getQrPass(parsed.passId!)
+            : null;
+        final studentInfo = pass != null
+            ? '${pass.studentName} (${pass.studentRollNumber})'
+            : 'Student';
         _scanResult =
-            '✓ ${action == 'exit' ? 'EXIT' : 'ENTRY'} recorded at $gateName$laneInfo$format\nVerification: $verificationCode';
+            '✓ ${action == 'exit' ? 'EXIT' : 'ENTRY'} recorded at $gateName$laneInfo\n$studentInfo';
+      }
+    });
+
+    // Resume camera after showing result
+    Future.delayed(const Duration(seconds: 3), () {
+      if (mounted && _scanTab == 0 && _cameraActive) {
+        _scannerController?.start();
       }
     });
   }
 
+  /// Verification code mode handler
+  Future<void> _processVerificationCode(String action) async {
+    setState(() {
+      _isScanning = true;
+      _scanResult = '';
+    });
+
+    final laneType = _selectedGate == GateType.hostel ? _selectedLane : null;
+    final gateName = _selectedGate == GateType.hostel ? 'Hostel Gate' : 'Main Gate';
+    final laneInfo = _selectedGate == GateType.hostel ? ' (${_selectedLane.label})' : '';
+
+    final code = _verificationCodeController.text.trim();
+    if (code.isEmpty) {
+      setState(() {
+        _isScanning = false;
+        _scanResult = '⚠ Please enter the verification code first';
+      });
+      return;
+    }
+
+    final (error, pass) = await widget.service.scanQrByVerificationCode(
+      code,
+      _selectedGate,
+      action,
+      laneType: laneType,
+    );
+
+    setState(() {
+      _isScanning = false;
+      if (error != null) {
+        _scanResult = '✗ $error';
+      } else {
+        final studentInfo = pass != null
+            ? '${pass.studentName} (${pass.studentRollNumber})'
+            : 'Student';
+        _scanResult =
+            '✓ ${action == 'exit' ? 'EXIT' : 'ENTRY'} recorded at $gateName$laneInfo\n$studentInfo • Code: $code';
+        _verificationCodeController.clear();
+      }
+    });
+  }
+
+  /// Exception lane: look up active passes by roll number
   Future<void> _handleException(String action) async {
     final rollNumber = _exceptionController.text.trim();
     final reason = _exceptionReasonController.text.trim();
@@ -1014,14 +1357,40 @@ class _SecurityHomeScreenState extends State<SecurityHomeScreen> {
     }
 
     setState(() => _isScanning = true);
-    await Future.delayed(const Duration(milliseconds: 500));
+
+    // Find active passes for this roll number
+    final activePasses = widget.service.qrPasses
+        .where((p) => p.isActive && p.studentRollNumber.toLowerCase() == rollNumber.toLowerCase())
+        .toList();
+
+    if (activePasses.isEmpty) {
+      setState(() {
+        _isScanning = false;
+        _scanResult = '✗ No active passes found for roll number "$rollNumber"';
+      });
+      return;
+    }
+
+    // If multiple passes, use the first matching one that is valid for this action
+    final pass = activePasses.first;
+    final laneType = _selectedGate == GateType.hostel ? LaneType.exception : null;
+    final error = await widget.service.scanQr(
+      pass.id,
+      _selectedGate,
+      action,
+      laneType: laneType,
+    );
 
     setState(() {
       _isScanning = false;
-      _scanResult =
-          '✓ OVERRIDE: ${action == 'exit' ? 'EXIT' : 'ENTRY'} recorded for $rollNumber';
-      _exceptionController.clear();
-      _exceptionReasonController.clear();
+      if (error != null) {
+        _scanResult = '✗ Override failed: $error';
+      } else {
+        _scanResult =
+            '✓ OVERRIDE ${action == 'exit' ? 'EXIT' : 'ENTRY'}: ${pass.studentName} ($rollNumber)\nReason: $reason';
+        _exceptionController.clear();
+        _exceptionReasonController.clear();
+      }
     });
   }
 

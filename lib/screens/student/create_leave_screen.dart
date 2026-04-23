@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:intl/intl.dart';
 import '../../core/theme/app_theme.dart';
 import '../../models/enums.dart';
 import '../../models/leave_request.dart';
@@ -67,8 +68,85 @@ class _CreateLeaveScreenState extends State<CreateLeaveScreen> {
       return;
     }
 
-    setState(() => _isSubmitting = true);
     final user = widget.service.currentUser!;
+
+    // ─── Overlap check ────────────────────────────────
+    final overlapping = widget.service.getOverlappingPasses(
+      user.uid,
+      _fromDate,
+      _toDate,
+    );
+
+    if (overlapping.isNotEmpty && mounted) {
+      final proceed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: AppColors.bgCard,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: AppColors.accentAmber, size: 24),
+              const SizedBox(width: 10),
+              const Text('Overlapping Pass',
+                  style: TextStyle(color: AppColors.textPrimary, fontSize: 16)),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'You already have ${overlapping.length} active pass(es) during this time:',
+                style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+              ),
+              const SizedBox(height: 12),
+              ...overlapping.map((p) => Container(
+                    margin: const EdgeInsets.only(bottom: 6),
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: AppColors.accentAmber.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: AppColors.accentAmber.withValues(alpha: 0.2),
+                      ),
+                    ),
+                    child: Text(
+                      '${DateFormat('dd MMM HH:mm').format(p.validFrom)} → ${DateFormat('dd MMM HH:mm').format(p.validUntil)} (${p.state.label})',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppColors.accentAmber,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  )),
+              const SizedBox(height: 8),
+              Text(
+                'Do you still want to submit this request?',
+                style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel',
+                  style: TextStyle(color: AppColors.textMuted)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.accentAmber,
+              ),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Submit Anyway'),
+            ),
+          ],
+        ),
+      );
+      if (proceed != true) return;
+    }
+    // ─────────────────────────────────────────────────────
+
+    setState(() => _isSubmitting = true);
     final request = LeaveRequest(
       id: 'lr_${DateTime.now().millisecondsSinceEpoch}',
       studentId: user.uid,
@@ -95,39 +173,114 @@ class _CreateLeaveScreenState extends State<CreateLeaveScreen> {
     }
   }
 
+  /// Shared dark theme for all picker dialogs — ensures nothing is white-on-white.
+  ThemeData get _pickerTheme {
+    const accent = Color(0xFF6366F1);
+    const bg = Color(0xFF1E1E2E);
+    const surfaceAlt = Color(0xFF2A2A3E);
+
+    return ThemeData.dark().copyWith(
+      colorScheme: const ColorScheme.dark(
+        primary: accent,
+        onPrimary: Colors.white,
+        secondary: accent,
+        onSecondary: Colors.white,
+        tertiary: accent,
+        onTertiary: Colors.white,
+        surface: bg,
+        onSurface: Colors.white,
+        surfaceContainerHighest: surfaceAlt,
+        outline: Color(0xFF444466),
+      ),
+      dialogBackgroundColor: bg,
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(foregroundColor: accent),
+      ),
+      // ─── Date Picker ────────────────────────────────
+      datePickerTheme: DatePickerThemeData(
+        backgroundColor: bg,
+        surfaceTintColor: Colors.transparent,
+        headerBackgroundColor: accent,
+        headerForegroundColor: Colors.white,
+        dayForegroundColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) return Colors.white;
+          if (states.contains(WidgetState.disabled)) {
+            return Colors.white38;
+          }
+          return Colors.white.withValues(alpha: 0.87);
+        }),
+        dayBackgroundColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) return accent;
+          return Colors.transparent;
+        }),
+        todayForegroundColor: WidgetStateProperty.all(accent),
+        todayBorder: const BorderSide(color: accent),
+        yearForegroundColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) return Colors.white;
+          return Colors.white70;
+        }),
+        yearBackgroundColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) return accent;
+          return Colors.transparent;
+        }),
+        weekdayStyle: const TextStyle(color: Colors.white60, fontSize: 12),
+        dayOverlayColor:
+            WidgetStateProperty.all(accent.withValues(alpha: 0.12)),
+      ),
+      // ─── Time Picker (clock dial) ───────────────────
+      timePickerTheme: TimePickerThemeData(
+        backgroundColor: bg,
+        dialBackgroundColor: surfaceAlt,
+        dialHandColor: accent,
+        dialTextColor: WidgetStateColor.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) return Colors.white;
+          return Colors.white.withValues(alpha: 0.87);
+        }),
+        hourMinuteColor: WidgetStateColor.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return accent.withValues(alpha: 0.25);
+          }
+          return surfaceAlt;
+        }),
+        hourMinuteTextColor: WidgetStateColor.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) return accent;
+          return Colors.white;
+        }),
+        dayPeriodColor: WidgetStateColor.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return accent.withValues(alpha: 0.25);
+          }
+          return surfaceAlt;
+        }),
+        dayPeriodTextColor: WidgetStateColor.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) return accent;
+          return Colors.white70;
+        }),
+        dayPeriodBorderSide: const BorderSide(color: Color(0xFF444466)),
+        entryModeIconColor: Colors.white70,
+        helpTextStyle:
+            const TextStyle(color: Colors.white60, fontSize: 12),
+        hourMinuteTextStyle: const TextStyle(
+          fontSize: 44,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+
   Future<void> _pickDate(bool isFrom) async {
     final picked = await showDatePicker(
       context: context,
       initialDate: isFrom ? _fromDate : _toDate,
       firstDate: DateTime.now(),
       lastDate: DateTime.now().add(const Duration(days: 90)),
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.dark(
-              primary: AppColors.primaryStart,
-              surface: AppColors.bgCard,
-            ),
-          ),
-          child: child!,
-        );
-      },
+      builder: (context, child) => Theme(data: _pickerTheme, child: child!),
     );
     if (picked != null) {
       final time = await showTimePicker(
         context: context,
         initialTime: TimeOfDay.fromDateTime(isFrom ? _fromDate : _toDate),
-        builder: (context, child) {
-          return Theme(
-            data: Theme.of(context).copyWith(
-              colorScheme: const ColorScheme.dark(
-                primary: AppColors.primaryStart,
-                surface: AppColors.bgCard,
-              ),
-            ),
-            child: child!,
-          );
-        },
+        builder: (context, child) => Theme(data: _pickerTheme, child: child!),
       );
       if (time != null) {
         setState(() {

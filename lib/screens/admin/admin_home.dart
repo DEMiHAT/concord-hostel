@@ -15,9 +15,52 @@ class AdminHomeScreen extends StatefulWidget {
 
 class _AdminHomeScreenState extends State<AdminHomeScreen> {
   int _currentIndex = 0;
+  bool _isLoading = true;
+  Map<String, int> _stats = {};
+  Map<String, dynamic> _attendance = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _loadData();
+  }
+
+  Future<void> _loadData() async {
+    try {
+      // Try async first (Firebase)
+      final dynamic svc = widget.service;
+      try {
+        _stats = await svc.getStatsAsync() as Map<String, int>;
+      } catch (_) {
+        _stats = widget.service.getStats();
+      }
+    } catch (_) {
+      _stats = widget.service.getStats();
+    }
+    _attendance = widget.service.getTodayAttendance();
+
+    if (mounted) {
+      setState(() => _isLoading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return GlassScaffold(
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(color: AppColors.primaryStart),
+              const SizedBox(height: 16),
+              Text('Loading...', style: TextStyle(color: AppColors.textMuted)),
+            ],
+          ),
+        ),
+      );
+    }
+
     return GlassScaffold(
       bottomNavigationBar: _buildBottomNav(),
       body: IndexedStack(
@@ -78,8 +121,8 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
   }
 
   Widget _buildDashboard() {
-    final stats = widget.service.getStats();
-    final attendance = widget.service.getTodayAttendance();
+    final stats = _stats;
+    final attendance = _attendance;
 
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),

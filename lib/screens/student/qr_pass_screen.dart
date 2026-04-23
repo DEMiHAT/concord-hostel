@@ -2,7 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:intl/intl.dart';
-import 'package:qr_flutter/qr_flutter.dart';
+import 'package:pretty_qr_code/pretty_qr_code.dart';
 import '../../core/theme/app_theme.dart';
 import '../../models/enums.dart';
 import '../../models/qr_pass.dart';
@@ -27,9 +27,14 @@ class _QrPassScreenState extends State<QrPassScreen> {
   Timer? _refreshTimer;
   Timer? _countdownTimer;
 
+  late QrPass _currentPass;
+  List<QrPass> _allPasses = [];
+
   @override
   void initState() {
     super.initState();
+    _currentPass = widget.pass;
+    _loadAllPasses();
     _generateQrData();
     _startAutoRefresh();
   }
@@ -41,15 +46,34 @@ class _QrPassScreenState extends State<QrPassScreen> {
     super.dispose();
   }
 
+  void _loadAllPasses() {
+    final studentId = widget.pass.studentId;
+    _allPasses = widget.service.getStudentPasses(studentId)
+        .where((p) => p.isActive || p.state == QrState.hostelEntered)
+        .toList()
+      ..sort((a, b) => b.validFrom.compareTo(a.validFrom));
+    // If only the passed pass, make sure it's in the list
+    if (_allPasses.isEmpty) {
+      _allPasses = [widget.pass];
+    }
+  }
+
+  void _switchPass(QrPass pass) {
+    setState(() {
+      _currentPass = pass;
+      _generateQrData();
+    });
+  }
+
   void _generateQrData() {
     _qrData = QrGenerationService.generateQrData(
-      passId: widget.pass.id,
-      studentId: widget.pass.studentId,
-      stateValue: widget.pass.state.firestoreValue,
+      passId: _currentPass.id,
+      studentId: _currentPass.studentId,
+      stateValue: _currentPass.state.firestoreValue,
     );
     _verificationCode = QrGenerationService.generateVerificationCode(
-      widget.pass.id,
-      widget.pass.studentId,
+      _currentPass.id,
+      _currentPass.studentId,
     );
     _secondsRemaining = QrGenerationService.secondsUntilTokenExpiry();
   }
@@ -108,7 +132,7 @@ class _QrPassScreenState extends State<QrPassScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final pass = widget.pass;
+    final pass = _currentPass;
     final stateColor = _getStateColor(pass.state);
     final dateFormat = DateFormat('dd MMM yyyy, hh:mm a');
 
@@ -124,6 +148,12 @@ class _QrPassScreenState extends State<QrPassScreen> {
         child: Column(
           children: [
             const SizedBox(height: 16),
+
+            // ── Pass Switcher (if multiple passes) ──
+            if (_allPasses.length > 1) ...[
+              _buildPassSwitcher(),
+              const SizedBox(height: 12),
+            ],
 
             // ── QR Code Card ──────────────────────────────────
             GlassCard(
@@ -185,17 +215,17 @@ class _QrPassScreenState extends State<QrPassScreen> {
                             ),
                           ],
                         ),
-                        child: QrImageView(
-                          data: _qrData,
-                          version: QrVersions.auto,
-                          size: 200,
-                          eyeStyle: QrEyeStyle(
-                            eyeShape: QrEyeShape.square,
-                            color: stateColor,
-                          ),
-                          dataModuleStyle: QrDataModuleStyle(
-                            dataModuleShape: QrDataModuleShape.square,
-                            color: AppColors.bgDark,
+                        child: SizedBox(
+                          width: 200,
+                          height: 200,
+                          child: PrettyQrView.data(
+                            data: _qrData,
+                            errorCorrectLevel: QrErrorCorrectLevel.M,
+                            decoration: const PrettyQrDecoration(
+                              shape: PrettyQrSmoothSymbol(
+                                color: AppColors.primaryStart,
+                              ),
+                            ),
                           ),
                         ),
                       ),
@@ -688,5 +718,118 @@ class _QrPassScreenState extends State<QrPassScreen> {
         );
       }),
     );
+  }
+
+  Widget _buildPassSwitcher() {
+    final dateFormat = DateFormat('dd MMM HH:mm');
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(Icons.swap_horiz_rounded,
+                size: 16, color: AppColors.primaryStart),
+            const SizedBox(width: 6),
+            Text(
+              '${_allPasses.length} Active Passes',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textPrimary,
+              ),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              '— Tap to switch',
+              style: TextStyle(
+                fontSize: 11,
+                color: AppColors.textMuted,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          height: 72,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: _allPasses.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 8),
+            itemBuilder: (context, index) {
+              final p = _allPasses[index];
+              final isSelected = p.id == _currentPass.id;
+              final color = _getStateColor(p.state);
+
+              return GestureDetector(
+                onTap: () => _switchPass(p),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 250),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? color.withValues(alpha: 0.08)
+                        : AppColors.glassWhite,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: isSelected
+                          ? color
+                          : AppColors.glassBorder,
+                      width: isSelected ? 2 : 0.5,
+                    ),
+                    boxShadow: isSelected
+                        ? [
+                            BoxShadow(
+                              color: color.withValues(alpha: 0.15),
+                              blurRadius: 8,
+                              offset: const Offset(0, 2),
+                            ),
+                          ]
+                        : null,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 8,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              color: color,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            p.state.label,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: isSelected ? color : AppColors.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${dateFormat.format(p.validFrom)} → ${dateFormat.format(p.validUntil)}',
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: AppColors.textMuted,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    ).animate().fadeIn(duration: 300.ms);
   }
 }

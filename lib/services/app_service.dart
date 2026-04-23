@@ -82,6 +82,30 @@ abstract class AppService extends ChangeNotifier {
     LaneType? laneType,
   });
 
+  /// Process a real QR scan — parse the raw QR data string, validate token,
+  /// then advance the pass state. Returns error string or null on success.
+  /// [scannedPassOut] receives the resolved QrPass on success.
+  Future<String?> processQrScan(
+    String rawQrData,
+    GateType gate,
+    String action, {
+    LaneType? laneType,
+  });
+
+  /// Security enters the 6-char verification code from the student's screen.
+  /// Finds the matching pass and advances its state.
+  /// Returns (error, matchedPass) — error is null on success.
+  Future<(String? error, QrPass? pass)> scanQrByVerificationCode(
+    String verificationCode,
+    GateType gate,
+    String action, {
+    LaneType? laneType,
+  });
+
+  /// Check for overlapping active passes for a student in a given time window.
+  /// Returns the list of passes whose validity overlaps [from]..[to].
+  List<QrPass> getOverlappingPasses(String studentId, DateTime from, DateTime to);
+
   /// Generate a QR pass for an approved leave request.
   /// Returns the generated [QrPass] or null if the request is not approved.
   Future<QrPass?> generateQrPass(String leaveRequestId);

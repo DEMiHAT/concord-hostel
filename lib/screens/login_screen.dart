@@ -103,6 +103,9 @@ class _LoginScreenState extends State<LoginScreen>
     }
   }
 
+  // Shared demo service instance — persists data across role switches
+  static MockService? _sharedDemoService;
+
   // ═══════════════════════════════════════════════════
   // DEMO ROLE LOGIN
   // ═══════════════════════════════════════════════════
@@ -115,8 +118,9 @@ class _LoginScreenState extends State<LoginScreen>
     });
 
     try {
-      // Always use MockService for demo mode, regardless of the main service
-      final demoService = MockService();
+      // Reuse the same MockService so data persists across role switches
+      _sharedDemoService ??= MockService();
+      final demoService = _sharedDemoService!;
       final user = await demoService.loginWithRole(role);
       if (user != null && mounted) {
         _navigateToHomeWithService(user.role, demoService);

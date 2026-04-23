@@ -9,15 +9,144 @@ import '../models/medical.dart';
 import '../models/grievance.dart';
 import '../models/geofence_attendance.dart';
 import 'app_service.dart';
+import 'qr_generation_service.dart';
 
 /// Production Firebase service implementing [AppService].
 /// Uses Firebase Auth for authentication and Cloud Firestore for data.
+/// All sync getters are backed by in-memory caches that are populated
+/// on login and refreshed after every mutation.
 class FirebaseService extends AppService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
   AppUser? _currentUser;
   bool _busMode = false;
+
+  // ── In-memory caches ──
+  List<LeaveRequest> _leaveRequestsCache = [];
+  List<QrPass> _qrPassesCache = [];
+  List<AppUser> _usersCache = [];
+  List<MedicalVisit> _medicalVisitsCache = [];
+  List<Grievance> _grievancesCache = [];
+  List<GeofenceSession> _geofenceSessionsCache = [];
+  List<GeofenceCheckIn> _geofenceCheckInsCache = [];
+  List<AttendanceAnomaly> _anomaliesCache = [];
+  List<AttendanceRecord> _attendanceCache = [];
+
+  // ════════════════════════════════════════════════════════
+  // CACHE REFRESH
+  // ════════════════════════════════════════════════════════
+
+  /// Refresh all caches — called after login and after mutations.
+  Future<void> _refreshCaches() async {
+    await Future.wait([
+      _refreshLeaveRequests(),
+      _refreshQrPasses(),
+      _refreshUsers(),
+      _refreshMedicalVisits(),
+      _refreshGrievances(),
+      _refreshGeofenceSessions(),
+      _refreshGeofenceCheckIns(),
+      _refreshAnomalies(),
+    ]);
+    notifyListeners();
+  }
+
+  Future<void> _refreshLeaveRequests() async {
+    try {
+      final snap = await _db
+          .collection('leave_requests')
+          .orderBy('createdAt', descending: true)
+          .get();
+      _leaveRequestsCache = snap.docs
+          .map((d) => LeaveRequest.fromFirestore(d.data(), d.id))
+          .toList();
+    } catch (_) {}
+  }
+
+  Future<void> _refreshQrPasses() async {
+    try {
+      final snap = await _db.collection('qr_passes').get();
+      _qrPassesCache = snap.docs
+          .map((d) => QrPass.fromFirestore(d.data(), d.id))
+          .toList();
+    } catch (_) {}
+  }
+
+  Future<void> _refreshUsers() async {
+    try {
+      final snap = await _db.collection('users').get();
+      _usersCache = snap.docs
+          .map((d) => AppUser.fromFirestore(d.data(), d.id))
+          .toList();
+    } catch (_) {}
+  }
+
+  Future<void> _refreshMedicalVisits() async {
+    try {
+      final snap = await _db
+          .collection('medical_visits')
+          .orderBy('createdAt', descending: true)
+          .get();
+      _medicalVisitsCache = snap.docs
+          .map((d) => MedicalVisit.fromFirestore(d.data(), d.id))
+          .toList();
+    } catch (_) {}
+  }
+
+  Future<void> _refreshGrievances() async {
+    try {
+      final snap = await _db.collection('grievances').get();
+      _grievancesCache = snap.docs
+          .map((d) => Grievance.fromFirestore(d.data(), d.id))
+          .toList();
+    } catch (_) {}
+  }
+
+  Future<void> _refreshGeofenceSessions() async {
+    try {
+      final snap = await _db.collection('geofence_sessions').get();
+      _geofenceSessionsCache = snap.docs
+          .map((d) => GeofenceSession.fromFirestore(d.data(), d.id))
+          .toList();
+    } catch (_) {}
+  }
+
+  Future<void> _refreshGeofenceCheckIns() async {
+    try {
+      final snap = await _db.collection('geofence_checkins').get();
+      _geofenceCheckInsCache = snap.docs
+          .map((d) => GeofenceCheckIn.fromFirestore(d.data(), d.id))
+          .toList();
+    } catch (_) {}
+  }
+
+  Future<void> _refreshAnomalies() async {
+    try {
+      final snap = await _db.collection('attendance_anomalies').get();
+      _anomaliesCache = snap.docs.map((d) {
+        final data = d.data();
+        return AttendanceAnomaly(
+          id: d.id,
+          studentId: data['studentId'] ?? '',
+          studentName: data['studentName'] ?? '',
+          rollNumber: data['rollNumber'] ?? '',
+          hostelBlock: data['hostelBlock'] ?? '',
+          type: AnomalyType.values.firstWhere(
+            (e) => e.name == data['type'],
+            orElse: () => AnomalyType.frequentAbsence,
+          ),
+          description: data['description'] ?? '',
+          raisedById: data['raisedById'] ?? '',
+          raisedByName: data['raisedByName'] ?? '',
+          raisedAt: (data['raisedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+          parentNotified: data['parentNotified'] ?? false,
+          resolved: data['resolved'] ?? false,
+          parentResponse: data['parentResponse'],
+        );
+      }).toList();
+    } catch (_) {}
+  }
 
   // ════════════════════════════════════════════════════════
   // AUTH
@@ -42,6 +171,8 @@ class FirebaseService extends AppService {
       final doc = await _db.collection('users').doc(credential.user!.uid).get();
       if (doc.exists) {
         _currentUser = AppUser.fromFirestore(doc.data()!, doc.id);
+        // Pre-load all caches after successful login
+        await _refreshCaches();
         notifyListeners();
         return _currentUser;
       }
@@ -53,6 +184,16 @@ class FirebaseService extends AppService {
   void logout() {
     _auth.signOut();
     _currentUser = null;
+    // Clear caches
+    _leaveRequestsCache = [];
+    _qrPassesCache = [];
+    _usersCache = [];
+    _medicalVisitsCache = [];
+    _grievancesCache = [];
+    _geofenceSessionsCache = [];
+    _geofenceCheckInsCache = [];
+    _anomaliesCache = [];
+    _attendanceCache = [];
     notifyListeners();
   }
 
@@ -61,73 +202,68 @@ class FirebaseService extends AppService {
   // ════════════════════════════════════════════════════════
 
   @override
-  List<LeaveRequest> get leaveRequests => []; // Use stream or fetch methods instead
+  List<LeaveRequest> get leaveRequests => List.unmodifiable(_leaveRequestsCache);
 
   /// Async version to fetch all leave requests.
   Future<List<LeaveRequest>> getAllLeaveRequestsAsync() async {
-    final snap = await _db
-        .collection('leave_requests')
-        .orderBy('createdAt', descending: true)
-        .get();
-    return snap.docs
-        .map((d) => LeaveRequest.fromFirestore(d.data(), d.id))
-        .toList();
+    await _refreshLeaveRequests();
+    return _leaveRequestsCache;
   }
 
   @override
   List<LeaveRequest> getStudentLeaves(String studentId) {
-    // For synchronous compatibility, return empty.
-    // Use getStudentLeavesAsync for production.
-    return [];
+    return _leaveRequestsCache
+        .where((l) => l.studentId == studentId)
+        .toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
   }
 
   /// Async version for production use.
   Future<List<LeaveRequest>> getStudentLeavesAsync(String studentId) async {
-    final snap = await _db
-        .collection('leave_requests')
-        .where('studentId', isEqualTo: studentId)
-        .orderBy('createdAt', descending: true)
-        .get();
-    return snap.docs
-        .map((d) => LeaveRequest.fromFirestore(d.data(), d.id))
-        .toList();
+    await _refreshLeaveRequests();
+    return getStudentLeaves(studentId);
   }
 
   @override
   List<LeaveRequest> getPendingApprovalsForRole(UserRole role) {
-    return [];
+    switch (role) {
+      case UserRole.rt:
+        return _leaveRequestsCache
+            .where(
+              (l) =>
+                  l.status == LeaveStatus.pending ||
+                  l.status == LeaveStatus.returnedToRt,
+            )
+            .toList();
+      case UserRole.parent:
+        return _leaveRequestsCache
+            .where((l) => l.status == LeaveStatus.forwardedToParent)
+            .toList();
+      case UserRole.hod:
+        return _leaveRequestsCache
+            .where(
+              (l) =>
+                  l.status == LeaveStatus.forwardedToHod ||
+                  l.status == LeaveStatus.awaitingHodAfterFaculty,
+            )
+            .toList();
+      case UserRole.warden:
+        return _leaveRequestsCache
+            .where((l) => l.status == LeaveStatus.forwardedToWarden)
+            .toList();
+      case UserRole.faculty:
+        return _leaveRequestsCache
+            .where((l) => l.status == LeaveStatus.forwardedToFaculty)
+            .toList();
+      default:
+        return [];
+    }
   }
 
   Future<List<LeaveRequest>> getPendingApprovalsForRoleAsync(
       UserRole role) async {
-    final List<String> statusFilters;
-    switch (role) {
-      case UserRole.rt:
-        statusFilters = ['pending', 'returned_to_rt'];
-        break;
-      case UserRole.parent:
-        statusFilters = ['forwarded_to_parent'];
-        break;
-      case UserRole.hod:
-        statusFilters = ['forwarded_to_hod', 'awaiting_hod_after_faculty'];
-        break;
-      case UserRole.warden:
-        statusFilters = ['forwarded_to_warden'];
-        break;
-      case UserRole.faculty:
-        statusFilters = ['forwarded_to_faculty'];
-        break;
-      default:
-        return [];
-    }
-
-    final snap = await _db
-        .collection('leave_requests')
-        .where('status', whereIn: statusFilters)
-        .get();
-    return snap.docs
-        .map((d) => LeaveRequest.fromFirestore(d.data(), d.id))
-        .toList();
+    await _refreshLeaveRequests();
+    return getPendingApprovalsForRole(role);
   }
 
   @override
@@ -136,6 +272,19 @@ class FirebaseService extends AppService {
         .collection('leave_requests')
         .doc(request.id)
         .set(request.toFirestore());
+
+    // Write audit log
+    await _writeAuditLog(
+      action: 'leave_created',
+      actorId: request.studentId,
+      actorName: request.studentName,
+      actorRole: 'Student',
+      targetId: request.id,
+      details: 'Created ${request.leaveType.label} leave request',
+    );
+
+    await _refreshLeaveRequests();
+    notifyListeners();
   }
 
   @override
@@ -186,7 +335,22 @@ class FirebaseService extends AppService {
     }
 
     await _db.collection('leave_requests').doc(requestId).update(updates);
-    notifyListeners();
+
+    // Write audit log
+    final actionLabel = newStatus == LeaveStatus.approved
+        ? 'approved'
+        : 'forwarded to ${newStatus.label}';
+    await _writeAuditLog(
+      action: 'leave_$actionLabel',
+      actorId: approverId,
+      actorName: approverName,
+      actorRole: role,
+      targetId: requestId,
+      details:
+          '$role $actionLabel leave request for ${request.studentName}',
+    );
+
+    await _refreshCaches();
   }
 
   LeaveStatus _getNextApprovalStatus(LeaveRequest request) {
@@ -260,6 +424,17 @@ class FirebaseService extends AppService {
       'approvalHistory':
           [...request.approvalHistory, step].map((e) => e.toMap()).toList(),
     });
+
+    await _writeAuditLog(
+      action: 'leave_rejected',
+      actorId: approverId,
+      actorName: approverName,
+      actorRole: role,
+      targetId: requestId,
+      details: '$role rejected leave for ${request.studentName}: $reason',
+    );
+
+    await _refreshLeaveRequests();
     notifyListeners();
   }
 
@@ -288,6 +463,17 @@ class FirebaseService extends AppService {
       'approvalHistory':
           [...request.approvalHistory, step].map((e) => e.toMap()).toList(),
     });
+
+    await _writeAuditLog(
+      action: 'documents_requested',
+      actorId: approverId,
+      actorName: approverName,
+      actorRole: 'Faculty',
+      targetId: requestId,
+      details: 'Faculty requested documents for ${request.studentName}',
+    );
+
+    await _refreshLeaveRequests();
     notifyListeners();
   }
 
@@ -315,6 +501,8 @@ class FirebaseService extends AppService {
       'approvalHistory':
           [...request.approvalHistory, step].map((e) => e.toMap()).toList(),
     });
+
+    await _refreshLeaveRequests();
     notifyListeners();
   }
 
@@ -323,11 +511,15 @@ class FirebaseService extends AppService {
   // ════════════════════════════════════════════════════════
 
   @override
-  List<QrPass> get qrPasses => [];
+  List<QrPass> get qrPasses => List.unmodifiable(_qrPassesCache);
 
   @override
   QrPass? getQrPass(String passId) {
-    return null; // Use async version
+    try {
+      return _qrPassesCache.firstWhere((q) => q.id == passId);
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<QrPass?> getQrPassAsync(String passId) async {
@@ -340,17 +532,12 @@ class FirebaseService extends AppService {
 
   @override
   List<QrPass> getStudentPasses(String studentId) {
-    return [];
+    return _qrPassesCache.where((q) => q.studentId == studentId).toList();
   }
 
   Future<List<QrPass>> getStudentPassesAsync(String studentId) async {
-    final snap = await _db
-        .collection('qr_passes')
-        .where('studentId', isEqualTo: studentId)
-        .get();
-    return snap.docs
-        .map((d) => QrPass.fromFirestore(d.data(), d.id))
-        .toList();
+    await _refreshQrPasses();
+    return getStudentPasses(studentId);
   }
 
   @override
@@ -415,6 +602,19 @@ class FirebaseService extends AppService {
       'state': newState.firestoreValue,
       'gateLogs': FieldValue.arrayUnion([log.toMap()]),
     });
+
+    // Write audit log for gate scan
+    await _writeAuditLog(
+      action: 'gate_scan',
+      actorId: _currentUser?.uid ?? 'security1',
+      actorName: _currentUser?.name ?? 'Security',
+      actorRole: 'Security',
+      targetId: passId,
+      details:
+          '${pass.studentName} ${action.toUpperCase()} at ${gate == GateType.hostel ? 'Hostel' : 'Main'} gate → ${newState.label}',
+    );
+
+    await _refreshQrPasses();
     notifyListeners();
     return null;
   }
@@ -450,8 +650,72 @@ class FirebaseService extends AppService {
       'updatedAt': Timestamp.fromDate(DateTime.now()),
     });
 
-    notifyListeners();
+    await _refreshCaches();
     return newPass;
+  }
+
+  // ─── Real QR scan processing ─────────────────────────
+  @override
+  Future<String?> processQrScan(
+    String rawQrData,
+    GateType gate,
+    String action, {
+    LaneType? laneType,
+  }) async {
+    final result = QrGenerationService.parseQrData(rawQrData);
+    if (!result.isValid) {
+      return result.error ?? 'Invalid QR code';
+    }
+    return scanQr(result.passId!, gate, action, laneType: laneType);
+  }
+
+  // ─── Manual verification code entry ─────────────────
+  @override
+  Future<(String? error, QrPass? pass)> scanQrByVerificationCode(
+    String verificationCode,
+    GateType gate,
+    String action, {
+    LaneType? laneType,
+  }) async {
+    final code = verificationCode.trim().toUpperCase();
+    if (code.isEmpty) {
+      return ('Please enter a verification code', null);
+    }
+
+    QrPass? matched;
+    for (final pass in _qrPassesCache) {
+      if (!pass.isActive) continue;
+      final passCode = QrGenerationService.generateVerificationCode(
+        pass.id,
+        pass.studentId,
+      );
+      if (passCode == code) {
+        matched = pass;
+        break;
+      }
+    }
+
+    if (matched == null) {
+      return ('No active pass found for code "$code"', null);
+    }
+
+    final error = await scanQr(matched.id, gate, action, laneType: laneType);
+    if (error != null) {
+      return (error, matched);
+    }
+
+    final updated = getQrPass(matched.id);
+    return (null, updated);
+  }
+
+  // ─── Overlap detection ──────────────────────────────
+  @override
+  List<QrPass> getOverlappingPasses(String studentId, DateTime from, DateTime to) {
+    return _qrPassesCache.where((p) {
+      if (p.studentId != studentId) return false;
+      if (!p.isActive) return false;
+      return p.validFrom.isBefore(to) && p.validUntil.isAfter(from);
+    }).toList();
   }
 
   @override
@@ -464,64 +728,132 @@ class FirebaseService extends AppService {
   }
 
   // ════════════════════════════════════════════════════════
-  // ADMIN / STATS
+  // ADMIN / STATS — now uses caches
   // ════════════════════════════════════════════════════════
 
   @override
   Map<String, int> getStats() {
     return {
-      'total': 0,
-      'pending': 0,
-      'approved': 0,
-      'rejected': 0,
-      'activeQr': 0,
-      'totalStudents': 0,
+      'total': _leaveRequestsCache.length,
+      'pending': _leaveRequestsCache
+          .where((l) => l.status == LeaveStatus.pending)
+          .length,
+      'approved': _leaveRequestsCache
+          .where((l) => l.status == LeaveStatus.approved)
+          .length,
+      'rejected': _leaveRequestsCache
+          .where((l) => l.status == LeaveStatus.rejected)
+          .length,
+      'activeQr': _qrPassesCache.where((q) => q.isActive).length,
+      'totalStudents':
+          _usersCache.where((u) => u.role == UserRole.student).length,
     };
   }
 
   Future<Map<String, int>> getStatsAsync() async {
-    final leaves = await _db.collection('leave_requests').get();
-    final qr = await _db
-        .collection('qr_passes')
-        .where('state', whereNotIn: ['expired', 'hostel_entered']).get();
-    final students = await _db
-        .collection('users')
-        .where('role', isEqualTo: 'student')
-        .get();
-
-    return {
-      'total': leaves.docs.length,
-      'pending': leaves.docs
-          .where((d) => d.data()['status'] == 'pending')
-          .length,
-      'approved': leaves.docs
-          .where((d) => d.data()['status'] == 'approved')
-          .length,
-      'rejected': leaves.docs
-          .where((d) => d.data()['status'] == 'rejected')
-          .length,
-      'activeQr': qr.docs.length,
-      'totalStudents': students.docs.length,
-    };
+    await _refreshCaches();
+    return getStats();
   }
 
   @override
-  List<Map<String, dynamic>> getAllGateLogs() => [];
+  List<Map<String, dynamic>> getAllGateLogs() {
+    final logs = <Map<String, dynamic>>[];
+    for (final pass in _qrPassesCache) {
+      for (final log in pass.gateLogs) {
+        logs.add({
+          'studentName': pass.studentName,
+          'rollNumber': pass.studentRollNumber,
+          'passId': pass.id,
+          'gateType': log.gateType,
+          'action': log.action,
+          'laneType': log.laneType,
+          'timestamp': log.timestamp,
+          'securityId': log.securityId,
+        });
+      }
+    }
+    logs.sort(
+        (a, b) => (b['timestamp'] as DateTime).compareTo(a['timestamp'] as DateTime));
+    return logs;
+  }
 
   @override
-  List<Map<String, dynamic>> getAllApprovalHistory() => [];
+  List<Map<String, dynamic>> getAllApprovalHistory() {
+    final history = <Map<String, dynamic>>[];
+    for (final req in _leaveRequestsCache) {
+      for (final step in req.approvalHistory) {
+        history.add({
+          'requestId': req.id,
+          'studentName': req.studentName,
+          'leaveType': req.leaveType.label,
+          'approverName': step.approverName,
+          'approverRole': step.approverRole,
+          'action': step.action,
+          'comment': step.comment,
+          'timestamp': step.timestamp,
+        });
+      }
+    }
+    history.sort(
+        (a, b) => (b['timestamp'] as DateTime).compareTo(a['timestamp'] as DateTime));
+    return history;
+  }
 
   @override
-  Map<String, List<AppUser>> getStudentsByBlock() => {};
+  Map<String, List<AppUser>> getStudentsByBlock() {
+    final students =
+        _usersCache.where((u) => u.role == UserRole.student).toList();
+    final blocks = <String, List<AppUser>>{};
+    for (final s in students) {
+      final block = s.hostelBlock ?? 'Unassigned';
+      blocks.putIfAbsent(block, () => []).add(s);
+    }
+    return blocks;
+  }
 
   @override
-  Map<String, dynamic> getTodayAttendance() => {
-        'exitedHostel': 0,
-        'exitedCampus': 0,
-        'returned': 0,
-        'stillOut': 0,
-        'total': 0,
-      };
+  Map<String, dynamic> getTodayAttendance() {
+    final today = DateTime.now();
+    final todayStart = DateTime(today.year, today.month, today.day);
+    int exitedHostel = 0;
+    int exitedCampus = 0;
+    int returned = 0;
+    int stillOut = 0;
+
+    for (final pass in _qrPassesCache) {
+      final hasActivityToday = pass.gateLogs.any(
+        (l) => l.timestamp.isAfter(todayStart),
+      );
+      if (!hasActivityToday) continue;
+
+      switch (pass.state) {
+        case QrState.hostelExited:
+          exitedHostel++;
+          stillOut++;
+          break;
+        case QrState.campusExited:
+          exitedCampus++;
+          stillOut++;
+          break;
+        case QrState.campusEntered:
+          stillOut++;
+          break;
+        case QrState.hostelEntered:
+          returned++;
+          break;
+        default:
+          break;
+      }
+    }
+
+    return {
+      'exitedHostel': exitedHostel,
+      'exitedCampus': exitedCampus,
+      'returned': returned,
+      'stillOut': stillOut,
+      'total': exitedHostel + exitedCampus + returned,
+    };
+  }
 
   // ════════════════════════════════════════════════════════
   // ATTENDANCE MODULE
@@ -533,16 +865,35 @@ class FirebaseService extends AppService {
   }
 
   @override
-  List<AttendanceRecord> getAttendanceForDate(DateTime date) => [];
+  List<AttendanceRecord> getAttendanceForDate(DateTime date) {
+    return _attendanceCache
+        .where((a) =>
+            a.date.year == date.year &&
+            a.date.month == date.month &&
+            a.date.day == date.day)
+        .toList();
+  }
 
   @override
-  List<AttendanceRecord> getStudentAttendance(String studentId) => [];
+  List<AttendanceRecord> getStudentAttendance(String studentId) {
+    return _attendanceCache
+        .where((a) => a.studentId == studentId)
+        .toList()
+      ..sort((a, b) => b.date.compareTo(a.date));
+  }
 
   @override
   List<AttendanceException> getUnresolvedExceptions() => [];
 
   @override
-  Map<AttendanceStatus, int> getAttendanceSummary(DateTime date) => {};
+  Map<AttendanceStatus, int> getAttendanceSummary(DateTime date) {
+    final records = getAttendanceForDate(date);
+    final summary = <AttendanceStatus, int>{};
+    for (final status in AttendanceStatus.values) {
+      summary[status] = records.where((r) => r.status == status).length;
+    }
+    return summary;
+  }
 
   // ════════════════════════════════════════════════════════
   // MEDICAL MODULE
@@ -640,6 +991,8 @@ class FirebaseService extends AppService {
     final data = visit.toFirestore();
     data['intimations'] = intimations;
     await _db.collection('medical_visits').doc(visitId).set(data);
+
+    await _refreshMedicalVisits();
     notifyListeners();
   }
 
@@ -660,6 +1013,7 @@ class FirebaseService extends AppService {
       updates['clearedBy'] = _currentUser?.name ?? 'System';
     }
     await _db.collection('medical_visits').doc(visitId).update(updates);
+    await _refreshMedicalVisits();
     notifyListeners();
   }
 
@@ -684,6 +1038,7 @@ class FirebaseService extends AppService {
     }
     if (note != null) updates['medicalOfficerNote'] = note;
     await _db.collection('medical_visits').doc(visitId).update(updates);
+    await _refreshMedicalVisits();
     notifyListeners();
   }
 
@@ -697,6 +1052,7 @@ class FirebaseService extends AppService {
       'clearedBy': _currentUser?.name ?? 'System',
       'reviewRequested': false,
     });
+    await _refreshMedicalVisits();
     notifyListeners();
   }
 
@@ -710,6 +1066,7 @@ class FirebaseService extends AppService {
       'reviewRequestNote': note ?? 'Student has requested a review',
       'reviewRequestedAt': Timestamp.fromDate(DateTime.now()),
     });
+    await _refreshMedicalVisits();
     notifyListeners();
   }
 
@@ -732,42 +1089,58 @@ class FirebaseService extends AppService {
     await _db.collection('medical_visits').doc(visitId).update({
       'intimations': intimations.map((i) => i.toMap()).toList(),
     });
+    await _refreshMedicalVisits();
     notifyListeners();
   }
 
   @override
   bool isStudentMedicalRestricted(String studentId) {
-    return false; // Use async version for production
+    return _medicalVisitsCache.any((m) =>
+        m.studentId == studentId &&
+        m.movementRestricted &&
+        m.status != MedicalStatus.cleared);
   }
 
   @override
   FitnessStatus? getStudentFitnessStatus(String studentId) {
-    return null;
+    final visits = _medicalVisitsCache
+        .where((m) => m.studentId == studentId)
+        .toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return visits.isEmpty ? null : visits.first.fitnessStatus;
   }
 
   @override
-  List<MedicalVisit> getStudentMedicalVisits(String studentId) => [];
+  List<MedicalVisit> getStudentMedicalVisits(String studentId) {
+    return _medicalVisitsCache
+        .where((m) => m.studentId == studentId)
+        .toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+  }
 
   @override
-  List<MedicalVisit> getAllMedicalVisits() => [];
+  List<MedicalVisit> getAllMedicalVisits() => List.unmodifiable(_medicalVisitsCache);
 
   @override
-  List<MedicalVisit> getReviewRequestedVisits() => [];
+  List<MedicalVisit> getReviewRequestedVisits() {
+    return _medicalVisitsCache.where((m) => m.reviewRequested).toList();
+  }
 
   @override
-  List<MedicalVisit> getActiveMedicalRecords() => [];
+  List<MedicalVisit> getActiveMedicalRecords() {
+    return _medicalVisitsCache
+        .where((m) => m.status != MedicalStatus.cleared)
+        .toList();
+  }
 
   @override
-  List<AppUser> getStudentUsers() => [];
+  List<AppUser> getStudentUsers() {
+    return _usersCache.where((u) => u.role == UserRole.student).toList();
+  }
 
   Future<List<AppUser>> getStudentUsersAsync() async {
-    final snap = await _db
-        .collection('users')
-        .where('role', isEqualTo: 'student')
-        .get();
-    return snap.docs
-        .map((d) => AppUser.fromFirestore(d.data(), d.id))
-        .toList();
+    await _refreshUsers();
+    return getStudentUsers();
   }
 
   // ════════════════════════════════════════════════════════
@@ -798,6 +1171,7 @@ class FirebaseService extends AppService {
         .collection('grievances')
         .doc(id)
         .set(grievance.toFirestore());
+    await _refreshGrievances();
     notifyListeners();
   }
 
@@ -823,6 +1197,7 @@ class FirebaseService extends AppService {
       'status': GrievanceStatus.actionTaken.firestoreValue,
       'actions': [...grievance.actions, action].map((a) => a.toMap()).toList(),
     });
+    await _refreshGrievances();
     notifyListeners();
   }
 
@@ -855,6 +1230,7 @@ class FirebaseService extends AppService {
       'assignedTo': assignedTo,
       'actions': [...grievance.actions, action].map((a) => a.toMap()).toList(),
     });
+    await _refreshGrievances();
     notifyListeners();
   }
 
@@ -881,17 +1257,24 @@ class FirebaseService extends AppService {
       'resolvedAt': Timestamp.fromDate(DateTime.now()),
       'actions': [...grievance.actions, action].map((a) => a.toMap()).toList(),
     });
+    await _refreshGrievances();
     notifyListeners();
   }
 
   @override
-  List<Grievance> getStudentGrievances(String studentId) => [];
+  List<Grievance> getStudentGrievances(String studentId) {
+    return _grievancesCache
+        .where((g) => g.studentId == studentId)
+        .toList();
+  }
 
   @override
-  List<Grievance> getGrievancesForRole(UserRole role) => [];
+  List<Grievance> getGrievancesForRole(UserRole role) {
+    return _grievancesCache;
+  }
 
   @override
-  List<Grievance> getAllGrievances() => [];
+  List<Grievance> getAllGrievances() => List.unmodifiable(_grievancesCache);
 
   // ════════════════════════════════════════════════════════
   // GEOFENCE ATTENDANCE MODULE
@@ -930,6 +1313,7 @@ class FirebaseService extends AppService {
         .collection('geofence_sessions')
         .doc(id)
         .set(session.toFirestore());
+    await _refreshGeofenceSessions();
     notifyListeners();
     return session;
   }
@@ -940,6 +1324,7 @@ class FirebaseService extends AppService {
       'status': GeofenceSessionStatus.closed.firestoreValue,
       'endTime': Timestamp.fromDate(DateTime.now()),
     });
+    await _refreshGeofenceSessions();
     notifyListeners();
   }
 
@@ -982,28 +1367,53 @@ class FirebaseService extends AppService {
       'markedCount': FieldValue.increment(1),
     });
 
+    await Future.wait([_refreshGeofenceSessions(), _refreshGeofenceCheckIns()]);
     notifyListeners();
     return null;
   }
 
   @override
   GeofenceSession? getActiveSession(String hostelBlock) {
-    return null; // Use async version
+    try {
+      return _geofenceSessionsCache.firstWhere(
+        (s) => s.hostelBlock == hostelBlock && s.isActive,
+      );
+    } catch (_) {
+      return null;
+    }
   }
 
   @override
-  List<GeofenceSession> getBlockSessions(String hostelBlock) => [];
+  List<GeofenceSession> getBlockSessions(String hostelBlock) {
+    return _geofenceSessionsCache
+        .where((s) => s.hostelBlock == hostelBlock)
+        .toList();
+  }
 
   @override
-  List<GeofenceCheckIn> getSessionCheckIns(String sessionId) => [];
+  List<GeofenceCheckIn> getSessionCheckIns(String sessionId) {
+    return _geofenceCheckInsCache
+        .where((c) => c.sessionId == sessionId)
+        .toList();
+  }
 
   @override
   bool hasStudentMarkedAttendance(String sessionId, String studentId) {
-    return false;
+    return _geofenceCheckInsCache.any(
+        (c) => c.sessionId == sessionId && c.studentId == studentId);
   }
 
   @override
-  double getStudentGeofencePercentage(String studentId) => 0.0;
+  double getStudentGeofencePercentage(String studentId) {
+    final totalSessions = _geofenceSessionsCache
+        .where((s) => s.status == GeofenceSessionStatus.closed)
+        .length;
+    if (totalSessions == 0) return 0.0;
+    final attended = _geofenceCheckInsCache
+        .where((c) => c.studentId == studentId)
+        .length;
+    return (attended / totalSessions) * 100;
+  }
 
   @override
   List<StudentAttendanceSummary> getBlockAttendanceSummary(
@@ -1051,17 +1461,27 @@ class FirebaseService extends AppService {
       'parentNotified': true,
       'resolved': false,
     });
+    await _refreshAnomalies();
     notifyListeners();
   }
 
   @override
-  List<AttendanceAnomaly> getAnomaliesForStudent(String studentId) => [];
+  List<AttendanceAnomaly> getAnomaliesForStudent(String studentId) {
+    return _anomaliesCache
+        .where((a) => a.studentId == studentId)
+        .toList();
+  }
 
   @override
-  List<AttendanceAnomaly> getAllAnomalies() => [];
+  List<AttendanceAnomaly> getAllAnomalies() =>
+      List.unmodifiable(_anomaliesCache);
 
   @override
-  int getUnresolvedAnomalyCount(String hostelBlock) => 0;
+  int getUnresolvedAnomalyCount(String hostelBlock) {
+    return _anomaliesCache
+        .where((a) => a.hostelBlock == hostelBlock && !a.resolved)
+        .length;
+  }
 
   @override
   Future<void> resolveAnomaly({
@@ -1073,17 +1493,62 @@ class FirebaseService extends AppService {
       'parentResponse': response,
       'resolvedAt': Timestamp.fromDate(DateTime.now()),
     });
+    await _refreshAnomalies();
     notifyListeners();
   }
 
   @override
-  List<GeofenceSession> getAllGeofenceSessions() => [];
+  List<GeofenceSession> getAllGeofenceSessions() =>
+      List.unmodifiable(_geofenceSessionsCache);
 
   @override
-  Map<String, dynamic> getGeofenceAttendanceStats() => {
-        'totalSessions': 0,
-        'avgAttendance': 0.0,
-        'totalCheckIns': 0,
-        'unresolvedAnomalies': 0,
-      };
+  Map<String, dynamic> getGeofenceAttendanceStats() {
+    final totalSessions = _geofenceSessionsCache.length;
+    final totalCheckIns = _geofenceCheckInsCache.length;
+    final closedSessions = _geofenceSessionsCache
+        .where((s) => s.status == GeofenceSessionStatus.closed)
+        .toList();
+    double avgAttendance = 0;
+    if (closedSessions.isNotEmpty) {
+      final total = closedSessions.fold<int>(
+          0, (sum, s) => sum + s.totalStudents);
+      if (total > 0) {
+        avgAttendance = (totalCheckIns / total) * 100;
+      }
+    }
+    return {
+      'totalSessions': totalSessions,
+      'avgAttendance': avgAttendance,
+      'totalCheckIns': totalCheckIns,
+      'unresolvedAnomalies': _anomaliesCache.where((a) => !a.resolved).length,
+    };
+  }
+
+  // ════════════════════════════════════════════════════════
+  // AUDIT LOGGING
+  // ════════════════════════════════════════════════════════
+
+  /// Write an audit log entry to the `audit_logs` Firestore collection.
+  Future<void> _writeAuditLog({
+    required String action,
+    required String actorId,
+    required String actorName,
+    required String actorRole,
+    required String targetId,
+    required String details,
+  }) async {
+    try {
+      await _db.collection('audit_logs').add({
+        'action': action,
+        'actorId': actorId,
+        'actorName': actorName,
+        'actorRole': actorRole,
+        'targetId': targetId,
+        'details': details,
+        'timestamp': Timestamp.fromDate(DateTime.now()),
+      });
+    } catch (_) {
+      // Audit logging should never break the main flow
+    }
+  }
 }

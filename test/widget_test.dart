@@ -3,7 +3,7 @@ import 'package:concord/main.dart';
 
 void main() {
   testWidgets('App launches', (WidgetTester tester) async {
-    await tester.pumpWidget(const ConcordApp());
-    expect(find.text('C.O.N.C.O.R.D.'), findsOneWidget);
+    await tester.pumpWidget(const HailmaryApp());
+    expect(find.text('H.A.I.L.M.A.R.Y.'), findsOneWidget);
   });
 }

@@ -8,6 +8,7 @@ import '../../models/qr_pass.dart';
 import '../../models/user_model.dart';
 import '../../services/app_service.dart';
 import '../../widgets/glass_widgets.dart';
+import '../../widgets/flex_widgets.dart';
 import '../shared/attendance_screen.dart';
 import '../shared/medical_screen.dart';
 import '../shared/grievance_screen.dart';
@@ -175,6 +176,8 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
         l.status != LeaveStatus.approved &&
         l.status != LeaveStatus.rejected).length;
     final approvedCount = leaves.where((l) => l.status == LeaveStatus.approved).length;
+    final rejectedCount = leaves.where((l) => l.status == LeaveStatus.rejected).length;
+    final totalCount = leaves.length;
 
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
@@ -183,87 +186,83 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const SizedBox(height: 16),
-          // Greeting
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Hello, ${user.name.split(' ').first} 👋',
-                      style: Theme.of(context).textTheme.headlineLarge,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${user.rollNumber} • ${user.hostelBlock}',
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                  ],
-                ),
-              ),
-              GestureDetector(
-                onTap: () {
-                  widget.service.logout();
-                  Navigator.of(context).pushReplacementNamed('/');
-                },
-                child: Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    gradient: AppColors.primaryGradient,
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: Center(
-                    child: Text(
-                      user.name[0],
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
+          // Premium Greeting Header
+          GreetingHeader(
+            name: user.name.split(' ').first,
+            subtitle: '${user.rollNumber} · ${user.hostelBlock}',
+            avatarLetter: user.name[0],
+            onAvatarTap: () =>
+                setState(() => _currentIndex = 3),
           ).animate().fadeIn(duration: 400.ms),
-          const SizedBox(height: 24),
+          const SizedBox(height: 8),
 
-          // Quick Stats
+          // Insight chips row
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            physics: const BouncingScrollPhysics(),
+            child: Row(
+              children: [
+                InsightChip(
+                  label: '${activePasses.length} Active Pass${activePasses.length != 1 ? 'es' : ''}',
+                  icon: Icons.qr_code_rounded,
+                  color: activePasses.isNotEmpty
+                      ? AppColors.accentGreen
+                      : AppColors.textMuted,
+                ),
+                const SizedBox(width: 8),
+                InsightChip(
+                  label: '$totalCount Total Requests',
+                  icon: Icons.receipt_long_rounded,
+                  color: AppColors.accentCyan,
+                ),
+                if (rejectedCount > 0) ...[
+                  const SizedBox(width: 8),
+                  InsightChip(
+                    label: '$rejectedCount Rejected',
+                    icon: Icons.block_rounded,
+                    color: AppColors.accentRed,
+                  ),
+                ],
+              ],
+            ),
+          ).animate().fadeIn(delay: 150.ms, duration: 400.ms),
+          const SizedBox(height: 20),
+
+          // Quick Stats — MetricTiles with animated counters
           Row(
             children: [
               Expanded(
-                child: StatCard(
-                  title: 'Pending',
+                child: MetricTile(
+                  label: 'Pending',
                   value: '$pendingCount',
                   icon: Icons.hourglass_top_rounded,
                   color: AppColors.accentAmber,
+                  trend: pendingCount > 0 ? '$pendingCount' : null,
+                  trendUp: false,
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: StatCard(
-                  title: 'Approved',
+                child: MetricTile(
+                  label: 'Approved',
                   value: '$approvedCount',
                   icon: Icons.check_circle_rounded,
                   color: AppColors.accentGreen,
+                  trend: approvedCount > 0 ? '+$approvedCount' : null,
+                  trendUp: true,
                 ),
               ),
             ],
           ).animate().fadeIn(delay: 200.ms, duration: 400.ms).slideY(begin: 0.05),
-          const SizedBox(height: 16),
+          const SizedBox(height: 20),
 
-          // Active QR Pass
+          // Active QR Pass — FloatingBanner
           if (activePasses.isNotEmpty) ...[
-            Text(
-              'Active Pass',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 8),
-            GlassCard(
-              borderColor: AppColors.accentGreen.withValues(alpha: 0.4),
-              backgroundColor: AppColors.accentGreen.withValues(alpha: 0.05),
+            FloatingBanner(
+              title: 'Gate Pass Active',
+              subtitle: 'Tap to view your QR pass · ${activePasses.first.state.label}',
+              icon: Icons.qr_code_2_rounded,
+              gradientColors: const [Color(0xFF059669), Color(0xFF047857)],
               onTap: () {
                 Navigator.push(
                   context,
@@ -275,71 +274,67 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
                   ),
                 );
               },
+            ).animate().fadeIn(delay: 300.ms, duration: 400.ms),
+            const SizedBox(height: 8),
+          ],
+
+          // Create leave — GradientBorderCard
+          GradientBorderCard(
+            borderColors: const [
+              Color(0xFF1A1A1A),
+              Color(0xFF444444),
+              Color(0xFF1A1A1A),
+              Color(0xFF444444),
+            ],
+            borderWidth: 1,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            child: GestureDetector(
+              onTap: () async {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => CreateLeaveScreen(service: widget.service),
+                  ),
+                );
+                _loadData();
+              },
               child: Row(
                 children: [
-                  Container(
-                    width: 56,
-                    height: 56,
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [AppColors.accentGreen, Color(0xFF059669)],
-                      ),
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: const Icon(
-                      Icons.qr_code_2_rounded,
-                      color: Colors.white,
-                      size: 28,
-                    ),
+                  const GradientIconBadge(
+                    icon: Icons.add_rounded,
+                    colors: [Color(0xFF1A1A1A), Color(0xFF444444)],
+                    size: 44,
+                    iconSize: 22,
+                    borderRadius: 14,
                   ),
-                  const SizedBox(width: 16),
+                  const SizedBox(width: 14),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          'QR Pass Ready',
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
-                        Text(
-                          'Tap to view your gate pass',
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
+                        Text('New Leave Request',
+                            style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.textPrimary)),
+                        Text('Submit a new application',
+                            style: TextStyle(
+                                fontSize: 12,
+                                color: AppColors.textMuted)),
                       ],
                     ),
                   ),
-                  StatusBadge(
-                    label: activePasses.first.state.label,
-                    color: AppColors.accentGreen,
-                  ),
+                  Icon(Icons.arrow_forward_ios_rounded,
+                      color: AppColors.textMuted, size: 14),
                 ],
               ),
-            ).animate().fadeIn(delay: 300.ms, duration: 400.ms),
-            const SizedBox(height: 16),
-          ],
-
-          // New Request Button
-          GlassButton(
-            label: 'Create Leave Request',
-            icon: Icons.add_rounded,
-            onPressed: () async {
-              await Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => CreateLeaveScreen(service: widget.service),
-                ),
-              );
-              _loadData();
-            },
+            ),
           ).animate().fadeIn(delay: 400.ms, duration: 400.ms),
           const SizedBox(height: 24),
 
-          // Quick Access Modules
-          Text(
-            'Quick Access',
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-          const SizedBox(height: 8),
+          // Quick Access with LabelDivider
+          const LabelDivider(label: 'Quick Access'),
+          const SizedBox(height: 12),
           Row(
             children: [
               Expanded(
@@ -385,14 +380,12 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
             borderColor: AppColors.accentCyan.withValues(alpha: 0.2),
             child: Row(
               children: [
-                Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: AppColors.accentCyan.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: const Icon(Icons.location_on_rounded, color: AppColors.accentCyan, size: 22),
+                const GradientIconBadge(
+                  icon: Icons.location_on_rounded,
+                  colors: [Color(0xFF0EA5E9), Color(0xFF0284C7)],
+                  size: 44,
+                  iconSize: 22,
+                  borderRadius: 14,
                 ),
                 const SizedBox(width: 14),
                 Expanded(
@@ -412,13 +405,37 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
           ).animate().fadeIn(delay: 600.ms, duration: 400.ms),
           const SizedBox(height: 24),
 
-          // Recent Requests
-          Text(
-            'Recent Requests',
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-          const SizedBox(height: 8),
-          ...leaves.take(3).map((leave) => _buildLeaveCard(leave)),
+          // Recent Requests with LabelDivider + staggered items
+          const LabelDivider(label: 'Recent Requests'),
+          const SizedBox(height: 12),
+          if (leaves.isEmpty)
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.all(32),
+                child: Column(
+                  children: [
+                    ProgressRing(
+                      progress: 0,
+                      size: 64,
+                      color: AppColors.textMuted,
+                      child: Icon(Icons.inbox_rounded,
+                          size: 28, color: AppColors.textMuted),
+                    ),
+                    const SizedBox(height: 16),
+                    Text('No requests yet',
+                        style: TextStyle(color: AppColors.textMuted, fontSize: 14)),
+                  ],
+                ),
+              ),
+            ).animate().fadeIn(delay: 700.ms)
+          else
+            ...leaves.take(3).toList().asMap().entries.map((entry) {
+              return StaggeredItem(
+                index: entry.key,
+                baseDelay: const Duration(milliseconds: 650),
+                child: _buildLeaveCard(entry.value),
+              );
+            }),
           const SizedBox(height: 100),
         ],
       ),
@@ -549,6 +566,23 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
             'Leave History',
             style: Theme.of(context).textTheme.headlineLarge,
           ),
+          const SizedBox(height: 6),
+          // Summary chips
+          Row(
+            children: [
+              InsightChip(
+                label: '${leaves.length} Total',
+                icon: Icons.list_alt_rounded,
+                color: AppColors.textSecondary,
+              ),
+              const SizedBox(width: 8),
+              InsightChip(
+                label: '${leaves.where((l) => l.status == LeaveStatus.approved).length} Approved',
+                icon: Icons.check_rounded,
+                color: AppColors.accentGreen,
+              ),
+            ],
+          ).animate().fadeIn(delay: 100.ms),
           const SizedBox(height: 16),
           if (leaves.isEmpty)
             Center(
@@ -556,7 +590,12 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
                 padding: const EdgeInsets.all(40),
                 child: Column(
                   children: [
-                    Icon(Icons.inbox_rounded, size: 64, color: AppColors.textMuted),
+                    ProgressRing(
+                      progress: 0,
+                      size: 64,
+                      color: AppColors.textMuted,
+                      child: Icon(Icons.inbox_rounded, size: 28, color: AppColors.textMuted),
+                    ),
                     const SizedBox(height: 16),
                     Text(
                       'No leave requests yet',
@@ -567,7 +606,13 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
               ),
             )
           else
-            ...leaves.map((leave) => _buildLeaveCard(leave)),
+            ...leaves.toList().asMap().entries.map((entry) {
+              return StaggeredItem(
+                index: entry.key,
+                baseDelay: const Duration(milliseconds: 200),
+                child: _buildLeaveCard(entry.value),
+              );
+            }),
           const SizedBox(height: 100),
         ],
       ),
@@ -578,6 +623,7 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
     final uid = widget.service.currentUser?.uid;
     if (uid == null) return const SizedBox.shrink();
     final allPasses = _allPasses;
+    final activeCount = allPasses.where((p) => p.isActive).length;
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
       padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -585,9 +631,28 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const SizedBox(height: 16),
-          Text(
-            'Gate Passes',
-            style: Theme.of(context).textTheme.headlineLarge,
+          Row(
+            children: [
+              Text(
+                'Gate Passes',
+                style: Theme.of(context).textTheme.headlineLarge,
+              ),
+              const Spacer(),
+              if (activeCount > 0)
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const PulsingDot(size: 7, color: AppColors.accentGreen),
+                    const SizedBox(width: 6),
+                    Text('$activeCount active',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: AppColors.accentGreen,
+                          fontWeight: FontWeight.w600,
+                        )),
+                  ],
+                ),
+            ],
           ),
           const SizedBox(height: 16),
           if (allPasses.isEmpty)
@@ -596,7 +661,12 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
                 padding: const EdgeInsets.all(40),
                 child: Column(
                   children: [
-                    Icon(Icons.qr_code_rounded, size: 64, color: AppColors.textMuted),
+                    ProgressRing(
+                      progress: 0,
+                      size: 64,
+                      color: AppColors.textMuted,
+                      child: Icon(Icons.qr_code_rounded, size: 28, color: AppColors.textMuted),
+                    ),
                     const SizedBox(height: 16),
                     Text(
                       'No passes generated yet',
@@ -672,48 +742,60 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
   }
 
   Widget _buildProfileView(AppUser user) {
+    // Calculate profile completion
+    int filled = 0;
+    int total = 5;
+    if (user.rollNumber != null && user.rollNumber!.isNotEmpty) filled++;
+    if (user.hostelBlock != null && user.hostelBlock!.isNotEmpty) filled++;
+    if (user.roomNumber != null && user.roomNumber!.isNotEmpty) filled++;
+    if (user.department != null && user.department!.isNotEmpty) filled++;
+    if (user.phone != null && user.phone!.isNotEmpty) filled++;
+    final double completion = filled / total;
+    final Color ringColor = completion >= 1.0
+        ? AppColors.accentGreen
+        : AppColors.accentCyan;
+
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Column(
         children: [
           const SizedBox(height: 16),
-          // Profile avatar
-          Container(
-            width: 80,
-            height: 80,
-            decoration: BoxDecoration(
-              gradient: AppColors.primaryGradient,
-              borderRadius: BorderRadius.circular(24),
-              boxShadow: [
-                BoxShadow(
-                  color: AppColors.primaryStart.withValues(alpha: 0.3),
-                  blurRadius: 20,
-                  offset: const Offset(0, 8),
-                ),
-              ],
-            ),
-            child: Center(
-              child: Text(
-                user.name[0],
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 32,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
+          // Profile avatar with progress ring
+          _buildProfileAvatar(user, ringColor, completion),
+          const SizedBox(height: 14),
           Text(user.name, style: Theme.of(context).textTheme.headlineMedium),
+          const SizedBox(height: 4),
           Text(user.email, style: Theme.of(context).textTheme.bodyMedium),
-          const SizedBox(height: 24),
+          const SizedBox(height: 8),
+          InsightChip(
+            label: completion == 1.0
+                ? 'Profile Complete'
+                : '${(completion * 100).toInt()}% Complete',
+            icon: completion == 1.0
+                ? Icons.verified_rounded
+                : Icons.info_outline_rounded,
+            color: completion == 1.0
+                ? AppColors.accentGreen
+                : AppColors.accentAmber,
+          ).animate().fadeIn(delay: 200.ms),
+          const SizedBox(height: 20),
 
-          _profileItem(Icons.badge_rounded, 'Roll Number', user.rollNumber ?? '-'),
-          _profileItem(Icons.apartment_rounded, 'Hostel Block', user.hostelBlock ?? '-'),
-          _profileItem(Icons.door_front_door_rounded, 'Room', user.roomNumber ?? '-'),
-          _profileItem(Icons.school_rounded, 'Department', user.department ?? '-'),
-          _profileItem(Icons.phone_rounded, 'Phone', user.phone ?? '-'),
+          const LabelDivider(label: 'Personal Info'),
+          const SizedBox(height: 10),
+          ...([
+            _profileItem(Icons.badge_rounded, 'Roll Number', user.rollNumber ?? '-'),
+            _profileItem(Icons.apartment_rounded, 'Hostel Block', user.hostelBlock ?? '-'),
+            _profileItem(Icons.door_front_door_rounded, 'Room', user.roomNumber ?? '-'),
+            _profileItem(Icons.school_rounded, 'Department', user.department ?? '-'),
+            _profileItem(Icons.phone_rounded, 'Phone', user.phone ?? '-'),
+          ].asMap().entries.map((entry) {
+            return StaggeredItem(
+              index: entry.key,
+              baseDelay: const Duration(milliseconds: 300),
+              child: entry.value,
+            );
+          })),
           const SizedBox(height: 24),
 
           GlassButton(
@@ -726,7 +808,7 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
               widget.service.logout();
               Navigator.of(context).pushReplacementNamed('/');
             },
-          ),
+          ).animate().fadeIn(delay: 600.ms),
           const SizedBox(height: 100),
         ],
       ),
@@ -748,6 +830,40 @@ class _StudentHomeScreenState extends State<StudentHomeScreen> {
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildProfileAvatar(AppUser user, Color ringColor, double completion) {
+    return ProgressRing(
+      progress: completion,
+      size: 96,
+      strokeWidth: 3,
+      color: ringColor,
+      child: Container(
+        width: 76,
+        height: 76,
+        decoration: BoxDecoration(
+          gradient: AppColors.primaryGradient,
+          borderRadius: BorderRadius.circular(22),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.primaryStart.withValues(alpha: 0.3),
+              blurRadius: 16,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Center(
+          child: Text(
+            user.name[0],
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 30,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
       ),
     );
   }

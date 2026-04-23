@@ -24,11 +24,46 @@ class LeaveDetailScreen extends StatefulWidget {
 
 class _LeaveDetailScreenState extends State<LeaveDetailScreen> {
   late LeaveRequest _leave;
+  bool _isGeneratingPass = false;
 
   @override
   void initState() {
     super.initState();
     _leave = widget.leave;
+    _refreshLeave();
+  }
+
+  /// Refresh the leave request from the service to pick up approval / QR changes,
+  /// then auto-generate a QR pass if the leave is approved but has none yet.
+  Future<void> _refreshLeave() async {
+    // Pull the latest version from the service's in-memory list
+    try {
+      final fresh = widget.service.leaveRequests.firstWhere(
+        (l) => l.id == widget.leave.id,
+        orElse: () => widget.leave,
+      );
+      if (mounted && fresh != _leave) {
+        setState(() => _leave = fresh);
+      }
+    } catch (_) {}
+
+    // Auto-generate QR pass when approved but no pass linked yet
+    if (_leave.status == LeaveStatus.approved && _leave.qrPassId == null) {
+      if (_isGeneratingPass) return;
+      _isGeneratingPass = true;
+      try {
+        final pass = await widget.service.generateQrPass(_leave.id);
+        if (pass != null && mounted) {
+          // Re-fetch the leave request to get the linked qrPassId
+          final updated = widget.service.leaveRequests.firstWhere(
+            (l) => l.id == _leave.id,
+            orElse: () => _leave,
+          );
+          setState(() => _leave = updated);
+        }
+      } catch (_) {}
+      _isGeneratingPass = false;
+    }
   }
 
   Color _getStatusColor(LeaveStatus status) {
@@ -357,14 +392,21 @@ class _LeaveDetailScreenState extends State<LeaveDetailScreen> {
                   gradient: const LinearGradient(
                     colors: [AppColors.accentGreen, Color(0xFF059669)],
                   ),
-                  onPressed: () {
-                    final pass = widget.service.getQrPass(leave.qrPassId!);
-                    if (pass != null) {
+                  onPressed: () async {
+                    var pass = widget.service.getQrPass(leave.qrPassId!);
+                    // Fallback to async if sync returns null (Firebase cache might not be ready)
+                    if (pass == null) {
+                      try {
+                        final dynamic svc = widget.service;
+                        pass = await svc.getQrPassAsync(leave.qrPassId!);
+                      } catch (_) {}
+                    }
+                    if (pass != null && mounted) {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
                           builder: (_) =>
-                              QrPassScreen(service: widget.service, pass: pass),
+                              QrPassScreen(service: widget.service, pass: pass!),
                         ),
                       );
                     }
@@ -385,10 +427,13 @@ class _LeaveDetailScreenState extends State<LeaveDetailScreen> {
                     final pass = await widget.service.generateQrPass(_leave.id);
                     if (pass != null && mounted) {
                       // Refresh the leave request to get the linked pass ID
-                      final updated = widget.service.leaveRequests.firstWhere(
-                        (l) => l.id == _leave.id,
-                        orElse: () => _leave,
-                      );
+                      LeaveRequest updated = _leave;
+                      try {
+                        updated = widget.service.leaveRequests.firstWhere(
+                          (l) => l.id == _leave.id,
+                          orElse: () => _leave,
+                        );
+                      } catch (_) {}
                       setState(() => _leave = updated);
                       Navigator.push(
                         context,
@@ -491,11 +536,14 @@ class _LeaveDetailScreenState extends State<LeaveDetailScreen> {
 
     if (selected != null && selected.isNotEmpty && mounted) {
       await widget.service.submitDocuments(_leave.id, selected);
-      // Refresh the leave request
-      final updated = widget.service.leaveRequests.firstWhere(
-        (l) => l.id == _leave.id,
-        orElse: () => _leave,
-      );
+      // Refresh the leave request from cache
+      LeaveRequest updated = _leave;
+      try {
+        updated = widget.service.leaveRequests.firstWhere(
+          (l) => l.id == _leave.id,
+          orElse: () => _leave,
+        );
+      } catch (_) {}
       setState(() => _leave = updated);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
